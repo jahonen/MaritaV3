@@ -89,6 +89,7 @@ pub async fn tick_loop(
     shared: Arc<Mutex<EngineState>>,
     mut command_rx: mpsc::UnboundedReceiver<ShipCommand>,
     tick_tx: broadcast::Sender<proto::SimulationTick>,
+    max_signals: usize,
 ) {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -103,7 +104,9 @@ pub async fn tick_loop(
 
         let proto_tick = {
             let mut guard = shared.lock().await;
-            let output = TickExecutor::new().step(&mut guard.state, &commands);
+            let output = TickExecutor::new()
+                .with_max_signals(max_signals)
+                .step(&mut guard.state, &commands);
             convert_tick_output(&output)
         };
 

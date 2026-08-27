@@ -30,9 +30,14 @@ A command-line harness for local scenarios and the gRPC server. Not a network se
 - **Side effects:** Loads ephemeris or checkpoint, spawns the gRPC server.
 
 ### `marita scenario`
-- **Inputs:** `--ticks`, `--ephemeris`, `--ships`, `--checkpoint-in <path>`, `--checkpoint-out <path>`.
+- **Inputs:** `--ticks`, `--ephemeris`, `--ships`, `--max-signals`, `--checkpoint-in <path>`, `--checkpoint-out <path>`.
 - **Outputs:** Console tick log; optional JSON checkpoint file.
 - **Side effects:** Writes checkpoint file if `--checkpoint-out` is given.
+
+### `marita benchmark`
+- **Inputs:** same as `scenario` except `--checkpoint-out`.
+- **Outputs:** Total wall time, ticks per second, milliseconds per tick, and final entity/signal counts.
+- **Side effects:** None.
 
 If `--checkpoint-in` is provided, the ephemeris and ship spawn options are ignored and the run starts from the saved state.
 

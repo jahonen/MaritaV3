@@ -68,9 +68,16 @@ This document lists every modular unit of functionality in the MaritaV3 space si
 - **Lifecycle:** alpha
 
 ### `SpatialIndex`
-- **Purpose:** Uniform-grid spatial index for dynamic 2D entities; used to avoid O(bodies × signals) signal-clipping scans when many bodies are loaded.
+- **Purpose:** Legacy uniform-grid spatial index for dynamic 2D entities. Replaced by `Quadtree` for signal, sensor, and collision queries.
 - **Inputs:** Entity positions and radii; a query center/radius or bounding box.
 - **Outputs:** Candidate entity indices for exact geometric tests.
+- **Side effects:** None.
+- **Lifecycle:** deprecated
+
+### `Quadtree`
+- **Purpose:** Adaptive 2D spatial index for points (bodies, ships) and regions (signal arcs). Rebuilt deterministically each tick so the hot paths scale with local density instead of total entity count.
+- **Inputs:** Entity AABBs, capacity threshold, max depth.
+- **Outputs:** Candidate indices for point, circle, and region queries.
 - **Side effects:** None.
 - **Lifecycle:** alpha
 

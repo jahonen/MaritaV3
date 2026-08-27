@@ -31,6 +31,10 @@ enum Commands {
         #[arg(long, default_value = "1")]
         ships: usize,
 
+        /// Maximum number of signal arcs to keep in memory.
+        #[arg(long, default_value = "50000")]
+        max_signals: usize,
+
         /// Load an initial state from a checkpoint file instead of ephemeris.
         #[arg(long, value_name = "PATH")]
         checkpoint_in: Option<PathBuf>,
@@ -49,6 +53,10 @@ enum Commands {
         #[arg(long, default_value = "1")]
         ships: usize,
 
+        /// Maximum number of signal arcs to keep in memory.
+        #[arg(long, default_value = "50000")]
+        max_signals: usize,
+
         /// Load an initial state from a checkpoint file instead of ephemeris.
         #[arg(long, value_name = "PATH")]
         checkpoint_in: Option<PathBuf>,
@@ -56,6 +64,28 @@ enum Commands {
         /// Save the final state to a checkpoint file after running.
         #[arg(long, value_name = "PATH")]
         checkpoint_out: Option<PathBuf>,
+    },
+    /// Benchmark a scripted local scenario and report performance.
+    Benchmark {
+        /// Number of ticks to run.
+        #[arg(long, default_value = "100")]
+        ticks: u64,
+
+        /// Ephemeris source: `circular` or path to a JSON snapshot.
+        #[arg(long, default_value = "circular")]
+        ephemeris: String,
+
+        /// Number of default play-test ships to spawn near Earth.
+        #[arg(long, default_value = "1")]
+        ships: usize,
+
+        /// Maximum number of signal arcs to keep in memory.
+        #[arg(long, default_value = "50000")]
+        max_signals: usize,
+
+        /// Load an initial state from a checkpoint file instead of ephemeris.
+        #[arg(long, value_name = "PATH")]
+        checkpoint_in: Option<PathBuf>,
     },
 }
 
@@ -67,10 +97,11 @@ async fn main() -> anyhow::Result<()> {
             addr,
             ephemeris,
             ships,
+            max_signals,
             checkpoint_in,
         } => {
             let addr: std::net::SocketAddr = addr.parse()?;
-            let mut state = if let Some(path) = checkpoint_in {
+            let state = if let Some(path) = checkpoint_in {
                 println!("Loading checkpoint from {}", path.display());
                 SimulationState::load(path).map_err(|e| anyhow::anyhow!(e))?
             } else {
@@ -79,12 +110,13 @@ async fn main() -> anyhow::Result<()> {
                 s.ships = spawn_play_ships(&s.bodies, ships);
                 s
             };
-            marita_grpc::server::run(addr, state).await?;
+            marita_grpc::server::run(addr, state, max_signals).await?;
         }
         Commands::Scenario {
             ticks,
             ephemeris,
             ships,
+            max_signals,
             checkpoint_in,
             checkpoint_out,
         } => {
@@ -98,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
                 s.ships = spawn_play_ships(&s.bodies, ships);
                 s
             };
-            let executor = marita_core::tick::TickExecutor::new();
+            let executor = marita_core::tick::TickExecutor::new().with_max_signals(max_signals);
             for _ in 0..ticks {
                 let output = executor.step(&mut state, &[]);
                 println!(
@@ -113,6 +145,44 @@ async fn main() -> anyhow::Result<()> {
                 println!("Saving checkpoint to {}", path.display());
                 state.save(path).map_err(|e| anyhow::anyhow!(e))?;
             }
+        }
+        Commands::Benchmark {
+            ticks,
+            ephemeris,
+            ships,
+            max_signals,
+            checkpoint_in,
+        } => {
+            println!("Benchmarking {ticks} ticks");
+            let mut state = if let Some(path) = checkpoint_in {
+                println!("Loading checkpoint from {}", path.display());
+                SimulationState::load(path).map_err(|e| anyhow::anyhow!(e))?
+            } else {
+                let mut s = SimulationState::new();
+                s.bodies = load_ephemeris(&ephemeris);
+                s.ships = spawn_play_ships(&s.bodies, ships);
+                s
+            };
+            let executor = marita_core::tick::TickExecutor::new().with_max_signals(max_signals);
+            let start = std::time::Instant::now();
+            for _ in 0..ticks {
+                executor.step(&mut state, &[]);
+            }
+            let elapsed = start.elapsed();
+            let elapsed_secs = elapsed.as_secs_f64();
+            let ticks_per_sec = ticks as f64 / elapsed_secs;
+            println!(
+                "Finished {ticks} ticks in {:.3}s ({:.2} ticks/s, {:.3} ms/tick)",
+                elapsed_secs,
+                ticks_per_sec,
+                elapsed_secs * 1000.0 / ticks as f64
+            );
+            println!(
+                "Final state: bodies={} ships={} signals={}",
+                state.bodies.len(),
+                state.ships.len(),
+                state.signals.len()
+            );
         }
     }
     Ok(())

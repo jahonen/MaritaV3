@@ -22,12 +22,27 @@ pub struct TickOutput {
 }
 
 /// Executes a single simulation tick.
-#[derive(Debug, Clone, Default)]
-pub struct TickExecutor;
+#[derive(Debug, Clone)]
+pub struct TickExecutor {
+    pub max_signals: usize,
+}
+
+impl Default for TickExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl TickExecutor {
     pub fn new() -> Self {
-        Self
+        Self {
+            max_signals: 50_000,
+        }
+    }
+
+    pub fn with_max_signals(mut self, max_signals: usize) -> Self {
+        self.max_signals = max_signals;
+        self
     }
 
     /// Run one tick of the simulation.
@@ -150,11 +165,10 @@ impl TickExecutor {
         state.signals.extend(emitted);
 
         // 14. Cap total signals to prevent unbounded memory growth.
-        const MAX_SIGNALS: usize = 50_000;
-        if state.signals.len() > MAX_SIGNALS {
+        if state.signals.len() > self.max_signals {
             // Keep the newest (highest id) arcs, which are the most recently emitted.
             state.signals.sort_by_key(|a| a.id);
-            let drain_count = state.signals.len() - MAX_SIGNALS;
+            let drain_count = state.signals.len() - self.max_signals;
             state.signals.drain(0..drain_count);
         }
 

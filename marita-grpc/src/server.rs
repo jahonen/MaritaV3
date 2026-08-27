@@ -9,7 +9,11 @@ use tokio::sync::{broadcast, mpsc, Mutex};
 use tonic::transport::Server;
 
 /// Run the gRPC server bound to `addr`.
-pub async fn run(addr: SocketAddr, initial_state: SimulationState) -> anyhow::Result<()> {
+pub async fn run(
+    addr: SocketAddr,
+    initial_state: SimulationState,
+    max_signals: usize,
+) -> anyhow::Result<()> {
     let (command_tx, command_rx) = mpsc::unbounded_channel();
     let (tick_tx, tick_rx) = broadcast::channel(16);
 
@@ -20,7 +24,7 @@ pub async fn run(addr: SocketAddr, initial_state: SimulationState) -> anyhow::Re
 
     // Spawn the background tick loop.
     let tick_shared = Arc::clone(&shared);
-    tokio::spawn(tick_loop(tick_shared, command_rx, tick_tx));
+    tokio::spawn(tick_loop(tick_shared, command_rx, tick_tx, max_signals));
 
     let service = MaritaEngineService::new(Arc::clone(&shared), command_tx, tick_rx);
 

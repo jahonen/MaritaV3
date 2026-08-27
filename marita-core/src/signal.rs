@@ -5,7 +5,7 @@
 //! intersects a massive body, the occluded angular portion is either destroyed
 //! (absorbed) or reflected, producing one or more new arcs.
 
-use crate::spatial::SpatialIndex;
+use crate::spatial_tree::{Aabb, Quadtree};
 use crate::state::{
     normalize_angle, Body, CollisionResponse, Ship, SignalArc, SimulationState, Spectrum,
     ThermalState, WavelengthBin,
@@ -50,25 +50,33 @@ pub fn clip_against_masses(signals: Vec<SignalArc>, bodies: &[Body], ships: &[Sh
     let mut absorbed_map: std::collections::HashMap<u64, (f64, Spectrum)> =
         std::collections::HashMap::new();
 
-    // For small entity counts the overhead of a spatial index is not worth it;
-    // fall back to the simple scan. Otherwise build indices for bodies/ships
-    // so each signal only checks nearby entities.
-    let total_entities = bodies.len() + ships.len();
-    let spatial_enabled = total_entities > 16;
-    let (body_index, ship_index) = if spatial_enabled {
-        build_entity_indices(bodies, ships)
-    } else {
-        (SpatialIndex::new(1.0), SpatialIndex::new(1.0))
-    };
+    // Build adaptive quadtrees for bodies and ships. Even for small counts the
+    // cost is negligible and the code path stays uniform.
+    let body_items: Vec<_> = bodies
+        .iter()
+        .enumerate()
+        .map(|(i, b)| (i, Aabb::from_point(b.position)))
+        .collect();
+    let ship_items: Vec<_> = ships
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (i, Aabb::from_point(s.position)))
+        .collect();
+    let body_tree = Quadtree::build(&body_items, 8, 16);
+    let ship_tree = Quadtree::build(&ship_items, 8, 16);
+
+    let max_body_radius = bodies.iter().map(|b| b.radius).fold(0.0, f64::max);
+    let max_ship_radius = ships.iter().map(|s| s.radius()).fold(0.0, f64::max);
 
     for arc in signals {
         clip_arc(
             arc,
             bodies,
             ships,
-            &body_index,
-            &ship_index,
-            spatial_enabled,
+            &body_tree,
+            &ship_tree,
+            max_body_radius,
+            max_ship_radius,
             &mut remaining,
             &mut reflected,
             &mut absorbed_map,
@@ -91,32 +99,14 @@ pub fn clip_against_masses(signals: Vec<SignalArc>, bodies: &[Body], ships: &[Sh
     }
 }
 
-fn build_entity_indices(bodies: &[Body], ships: &[Ship]) -> (SpatialIndex, SpatialIndex) {
-    let max_body_radius = bodies.iter().map(|b| b.radius).fold(0.0, f64::max);
-    let max_ship_radius = ships.iter().map(|s| s.radius()).fold(0.0, f64::max);
-    let max_entity_radius = max_body_radius.max(max_ship_radius).max(1.0);
-    let cell_size = max_entity_radius * 2.0;
-
-    let mut body_index = SpatialIndex::new(cell_size);
-    for (i, body) in bodies.iter().enumerate() {
-        body_index.insert(body.position, i);
-    }
-
-    let mut ship_index = SpatialIndex::new(cell_size);
-    for (i, ship) in ships.iter().enumerate() {
-        ship_index.insert(ship.position, i);
-    }
-
-    (body_index, ship_index)
-}
-
 fn clip_arc(
     arc: SignalArc,
     bodies: &[Body],
     ships: &[Ship],
-    body_index: &SpatialIndex,
-    ship_index: &SpatialIndex,
-    spatial_enabled: bool,
+    body_tree: &Quadtree,
+    ship_tree: &Quadtree,
+    max_body_radius: f64,
+    max_ship_radius: f64,
     remaining: &mut Vec<SignalArc>,
     reflected: &mut Vec<SignalArc>,
     absorbed_map: &mut std::collections::HashMap<u64, (f64, Spectrum)>,
@@ -128,82 +118,41 @@ fn clip_arc(
     // emitters are not immediately occluded by their own source.
     let source_id = arc.source_id;
 
-    if spatial_enabled {
-        let max_body_radius = bodies.iter().map(|b| b.radius).fold(0.0, f64::max);
-        let max_ship_radius = ships.iter().map(|s| s.radius()).fold(0.0, f64::max);
-        let max_entity_radius = max_body_radius.max(max_ship_radius);
-        let query_radius = arc.outer_radius + max_entity_radius;
-        for i in body_index.query_circle(arc.origin, query_radius) {
-            let body = &bodies[i];
-            if source_id == Some(body.id) {
-                continue;
-            }
-            if !matches!(body.collision_response, CollisionResponse::Ghost) {
-                let dist_sq = (body.position - arc.origin).length_squared();
-                if dist_sq < (arc.outer_radius + body.radius) * (arc.outer_radius + body.radius) {
-                    occluders.push((
-                        body.id,
-                        body.position,
-                        body.radius,
-                        body.collision_response,
-                        body.albedo,
-                    ));
-                }
+    let max_entity_radius = max_body_radius.max(max_ship_radius);
+    let query_radius = arc.outer_radius + max_entity_radius;
+    for i in body_tree.query_circle(arc.origin, query_radius) {
+        let body = &bodies[i];
+        if source_id == Some(body.id) {
+            continue;
+        }
+        if !matches!(body.collision_response, CollisionResponse::Ghost) {
+            let dist_sq = (body.position - arc.origin).length_squared();
+            if dist_sq < (arc.outer_radius + body.radius) * (arc.outer_radius + body.radius) {
+                occluders.push((
+                    body.id,
+                    body.position,
+                    body.radius,
+                    body.collision_response,
+                    body.albedo,
+                ));
             }
         }
-        for i in ship_index.query_circle(arc.origin, query_radius) {
-            let ship = &ships[i];
-            if source_id == Some(ship.id) {
-                continue;
-            }
-            if !matches!(ship.collision_response, CollisionResponse::Ghost) {
-                let dist_sq = (ship.position - arc.origin).length_squared();
-                if dist_sq < (arc.outer_radius + ship.radius()) * (arc.outer_radius + ship.radius())
-                {
-                    occluders.push((
-                        ship.id,
-                        ship.position,
-                        ship.radius(),
-                        ship.collision_response,
-                        ship.albedo,
-                    ));
-                }
-            }
+    }
+    for i in ship_tree.query_circle(arc.origin, query_radius) {
+        let ship = &ships[i];
+        if source_id == Some(ship.id) {
+            continue;
         }
-    } else {
-        for body in bodies {
-            if source_id == Some(body.id) {
-                continue;
-            }
-            if !matches!(body.collision_response, CollisionResponse::Ghost) {
-                let dist_sq = (body.position - arc.origin).length_squared();
-                if dist_sq < (arc.outer_radius + body.radius) * (arc.outer_radius + body.radius) {
-                    occluders.push((
-                        body.id,
-                        body.position,
-                        body.radius,
-                        body.collision_response,
-                        body.albedo,
-                    ));
-                }
-            }
-        }
-        for ship in ships {
-            if source_id == Some(ship.id) {
-                continue;
-            }
-            if !matches!(ship.collision_response, CollisionResponse::Ghost) {
-                let dist_sq = (ship.position - arc.origin).length_squared();
-                if dist_sq < (arc.outer_radius + ship.radius()) * (arc.outer_radius + ship.radius())
-                {
-                    occluders.push((
-                        ship.id,
-                        ship.position,
-                        ship.radius(),
-                        ship.collision_response,
-                        ship.albedo,
-                    ));
-                }
+        if !matches!(ship.collision_response, CollisionResponse::Ghost) {
+            let dist_sq = (ship.position - arc.origin).length_squared();
+            if dist_sq < (arc.outer_radius + ship.radius()) * (arc.outer_radius + ship.radius()) {
+                occluders.push((
+                    ship.id,
+                    ship.position,
+                    ship.radius(),
+                    ship.collision_response,
+                    ship.albedo,
+                ));
             }
         }
     }

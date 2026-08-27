@@ -5,6 +5,7 @@
 //! computes what a ship can detect from the current signal arcs, taking
 //! jamming (other in-band signals) into account.
 
+use crate::spatial_tree::{Aabb, Quadtree};
 use crate::state::{normalize_angle, Ship, SignalArc, WavelengthBin, SPECTRUM_BINS};
 use glam::DVec2;
 
@@ -23,13 +24,28 @@ pub struct Detection {
 
 /// Compute all detections for all ships.
 pub fn compute_all_detections(ships: &[Ship], signals: &[SignalArc]) -> Vec<Vec<Detection>> {
+    if signals.is_empty() || ships.is_empty() {
+        return ships.iter().map(|_| Vec::new()).collect();
+    }
+
+    let signal_items: Vec<_> = signals
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (i, Aabb::from_circle(s.origin, s.outer_radius)))
+        .collect();
+    let signal_tree = Quadtree::build(&signal_items, 16, 20);
+
     ships
         .iter()
-        .map(|ship| compute_ship_detections(ship, signals))
+        .map(|ship| compute_ship_detections(ship, signals, &signal_tree))
         .collect()
 }
 
-fn compute_ship_detections(ship: &Ship, signals: &[SignalArc]) -> Vec<Detection> {
+fn compute_ship_detections(
+    ship: &Ship,
+    signals: &[SignalArc],
+    signal_tree: &Quadtree,
+) -> Vec<Detection> {
     let mut detections = Vec::new();
 
     for sensor in &ship.sensor_arrays {
@@ -41,7 +57,10 @@ fn compute_ship_detections(ship: &Ship, signals: &[SignalArc]) -> Vec<Detection>
         let mut received: [f64; SPECTRUM_BINS] = [0.0; SPECTRUM_BINS];
         let mut per_arc: Vec<(usize, [f64; SPECTRUM_BINS], f64)> = Vec::new();
 
-        for (arc_idx, arc) in signals.iter().enumerate() {
+        let sensor_aabb = Aabb::from_circle(sensor_pos, 1.0);
+        let candidate_indices = signal_tree.query_region(sensor_aabb);
+        for arc_idx in candidate_indices {
+            let arc = &signals[arc_idx];
             let delta = sensor_pos - arc.origin;
             let r = delta.length();
             if r < arc.inner_radius || r > arc.outer_radius {
@@ -161,7 +180,9 @@ mod tests {
         arc.inner_radius = 0.9e6;
         arc.outer_radius = 1.1e6;
 
-        let detections = compute_ship_detections(&ship, &[arc]);
+        let signal_items = vec![(0usize, Aabb::from_circle(arc.origin, arc.outer_radius))];
+        let signal_tree = Quadtree::build(&signal_items, 4, 8);
+        let detections = compute_ship_detections(&ship, &[arc], &signal_tree);
         assert!(!detections.is_empty());
         assert!(detections
             .iter()
@@ -183,7 +204,9 @@ mod tests {
         arc.inner_radius = 0.9e6;
         arc.outer_radius = 1.1e6;
 
-        let detections = compute_ship_detections(&ship, &[arc]);
+        let signal_items = vec![(0usize, Aabb::from_circle(arc.origin, arc.outer_radius))];
+        let signal_tree = Quadtree::build(&signal_items, 4, 8);
+        let detections = compute_ship_detections(&ship, &[arc], &signal_tree);
         // Sensor points at +X, source is at +Y, outside FOV.
         assert!(detections.is_empty());
     }

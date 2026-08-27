@@ -4,6 +4,7 @@
 //! objects bounce with a coefficient of restitution. Processing is pairwise;
 //! overlapping pairs are separated by a positional correction impulse.
 
+use crate::spatial_tree::{Aabb, Quadtree};
 use crate::state::{Body, CollisionResponse, Ship};
 use glam::DVec2;
 
@@ -19,10 +20,10 @@ pub struct CollisionResult {
 /// Ships never merge; they bounce. Bodies merge if their response is
 /// `Merge`. The function returns updated entity lists.
 pub fn resolve_collisions(bodies: Vec<Body>, ships: Vec<Ship>) -> CollisionResult {
-    let mut bodies = resolve_body_collisions(bodies);
+    let bodies = resolve_body_collisions(bodies);
     let mut ships = ships;
 
-    resolve_ship_body_collisions(&mut ships, &mut bodies);
+    resolve_ship_body_collisions(&mut ships, &bodies);
     resolve_ship_ship_collisions(&mut ships);
 
     CollisionResult { bodies, ships }
@@ -101,12 +102,26 @@ fn resolve_body_bounce(a: &mut Body, b: &Body, normal: DVec2, dist: f64, min_dis
     a.position -= correction;
 }
 
-fn resolve_ship_body_collisions(ships: &mut [Ship], bodies: &mut [Body]) {
+fn resolve_ship_body_collisions(ships: &mut [Ship], bodies: &[Body]) {
+    if ships.is_empty() || bodies.is_empty() {
+        return;
+    }
+
+    let body_items: Vec<_> = bodies
+        .iter()
+        .enumerate()
+        .map(|(i, b)| (i, Aabb::from_point(b.position)))
+        .collect();
+    let body_tree = Quadtree::build(&body_items, 8, 16);
+    let max_body_radius = bodies.iter().map(|b| b.radius).fold(0.0, f64::max);
+
     for ship in ships.iter_mut() {
         if matches!(ship.collision_response, CollisionResponse::Ghost) {
             continue;
         }
-        for body in bodies.iter_mut() {
+        let query_radius = ship.radius() + max_body_radius;
+        for i in body_tree.query_circle(ship.position, query_radius) {
+            let body = &bodies[i];
             let delta = ship.position - body.position;
             let dist = delta.length();
             let min_dist = ship.radius() + body.radius;
@@ -119,22 +134,47 @@ fn resolve_ship_body_collisions(ships: &mut [Ship], bodies: &mut [Body]) {
 }
 
 fn resolve_ship_ship_collisions(ships: &mut [Ship]) {
+    if ships.len() < 2 {
+        return;
+    }
+
+    let ship_items: Vec<_> = ships
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (i, Aabb::from_point(s.position)))
+        .collect();
+    let ship_tree = Quadtree::build(&ship_items, 8, 16);
+    let max_ship_radius = ships.iter().map(|s| s.radius()).fold(0.0, f64::max);
+
     for i in 0..ships.len() {
-        for j in (i + 1)..ships.len() {
-            // SAFETY: distinct indices.
-            let delta = ships[i].position - ships[j].position;
+        let radius_i = ships[i].radius();
+        let query_radius = radius_i + max_ship_radius;
+        let candidates = ship_tree.query_circle(ships[i].position, query_radius);
+
+        // Borrow the i-th ship mutably and every candidate j < i mutably.
+        // Candidates with j >= i are handled when those indices are processed.
+        for j in candidates {
+            if j >= i {
+                continue;
+            }
+
+            let (left, right) = ships.split_at_mut(i);
+            let ship_i = right.first_mut().unwrap();
+            let ship_j = &mut left[j];
+
+            let delta = ship_i.position - ship_j.position;
             let dist = delta.length();
-            let min_dist = ships[i].radius() + ships[j].radius();
+            let min_dist = ship_i.radius() + ship_j.radius();
             if dist < min_dist {
                 let normal = if dist > 1e-6 { delta / dist } else { DVec2::X };
-                let mass_j = ships[j].mass();
-                let vel_j = ships[j].velocity;
-                resolve_ship_bounce(&mut ships[i], mass_j, vel_j, normal, dist, min_dist);
+                let mass_j = ship_j.mass();
+                let vel_j = ship_j.velocity;
+                resolve_ship_bounce(ship_i, mass_j, vel_j, normal, dist, min_dist);
                 // Update j as well with respect to i.
-                let mass_i = ships[i].mass();
-                let vel_i = ships[i].velocity;
+                let mass_i = ship_i.mass();
+                let vel_i = ship_i.velocity;
                 let normal_j = -normal;
-                resolve_ship_bounce(&mut ships[j], mass_i, vel_i, normal_j, dist, min_dist);
+                resolve_ship_bounce(ship_j, mass_i, vel_i, normal_j, dist, min_dist);
             }
         }
     }
