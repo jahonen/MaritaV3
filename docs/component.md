@@ -53,11 +53,25 @@ This document lists every modular unit of functionality in the MaritaV3 space si
 - **Side effects:** May remove/merge entities.
 - **Lifecycle:** alpha
 
-### `EphemerisLoader`
-- **Purpose:** Loads initial state vectors for solar-system bodies from SPICE kernels.
-- **Inputs:** Local SPICE kernel files or fallback JSON snapshot.
+### `CircularOrbitLoader`
+- **Purpose:** Fallback loader providing simplified circular heliocentric orbits for development and tests.
+- **Inputs:** None (constants).
+- **Outputs:** `Vec<Body>` for Sun + eight planets.
+- **Side effects:** None.
+- **Lifecycle:** alpha
+
+### `JsonFileLoader`
+- **Purpose:** Loads an ephemeris snapshot generated from local SPICE kernels by `scripts/generate_ephemeris.py`.
+- **Inputs:** Path to JSON snapshot file.
+- **Outputs:** `Vec<Body>` projected onto the ecliptic plane.
+- **Side effects:** Reads file.
+- **Lifecycle:** alpha
+
+### `EphemerisLoader` (trait)
+- **Purpose:** Common interface for initial-condition loaders.
+- **Inputs:** Implementation-specific.
 - **Outputs:** `Vec<Body>` at simulation epoch.
-- **Side effects:** Reads files.
+- **Side effects:** Depends on implementation.
 - **Lifecycle:** alpha
 
 ### `TickExecutor`

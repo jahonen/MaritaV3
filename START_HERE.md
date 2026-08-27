@@ -26,11 +26,11 @@ Requires Rust (installed via rustup) and protobuf (`brew install protobuf` on ma
 # Run all tests
 cargo test --workspace
 
-# Run a short local scenario
+# Run a short local scenario (circular ephemeris fallback)
 cargo run --bin marita -- scenario --ticks 100
 
-# Start the gRPC server (in one terminal)
-cargo run --bin marita -- serve --addr 127.0.0.1:50051
+# Start the gRPC server with real SPICE ephemeris
+cargo run --bin marita -- serve --ephemeris data/ephemeris.json --addr 127.0.0.1:50051
 
 # Launch the admin viewer (in another terminal)
 cargo run --bin marita-admin -- --addr http://127.0.0.1:50051

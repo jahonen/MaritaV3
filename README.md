@@ -30,6 +30,8 @@ belief in the imagination of kids made everything feel possible.
   bounce.
 - **API:** gRPC service with bidirectional command streaming and full-state
   snapshots.
+- **Ephemeris:** local SPICE kernel support via `scripts/generate_ephemeris.py`,
+  plus a circular-orbit fallback for development.
 - **Admin Viewer:** local `egui`/`eframe` gods-eye visualizer that connects to
   the running gRPC server. It handles extreme scales (AU down to meters) with
   zoom/pan, labels, grid, and entity selection.
@@ -43,11 +45,11 @@ macOS).
 # Run all tests
 cargo test --workspace
 
-# Run a short local scenario
+# Run a short local scenario (circular ephemeris fallback)
 cargo run --bin marita -- scenario --ticks 100
 
-# Start the gRPC server (in one terminal)
-cargo run --bin marita -- serve --addr 127.0.0.1:50051
+# Start the gRPC server with real SPICE ephemeris
+cargo run --bin marita -- serve --ephemeris data/ephemeris.json --addr 127.0.0.1:50051
 
 # Launch the admin viewer (in another terminal)
 cargo run --bin marita-admin -- --addr http://127.0.0.1:50051

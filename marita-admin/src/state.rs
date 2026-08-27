@@ -1,6 +1,7 @@
 //! Lightweight snapshot state used by the admin viewer.
 
 use marita_grpc::proto;
+use std::collections::HashMap;
 
 /// A body entity from the simulation.
 #[derive(Clone, Debug)]
@@ -131,5 +132,51 @@ fn convert_signal(a: proto::SignalArc) -> SignalArc {
         outer_radius: a.outer_radius,
         source_id: a.source_id,
         total_strength: total,
+    }
+}
+
+/// Rolling history of entity positions for drawing orbit trails.
+pub struct TrailHistory {
+    max_points: usize,
+    trails: HashMap<u64, Vec<glam::DVec2>>,
+}
+
+impl TrailHistory {
+    pub fn new(max_points: usize) -> Self {
+        Self {
+            max_points,
+            trails: HashMap::new(),
+        }
+    }
+
+    pub fn update(&mut self, state: &ViewerState) {
+        for body in &state.bodies {
+            self.push(body.id, body.position);
+        }
+        for ship in &state.ships {
+            self.push(ship.id, ship.position);
+        }
+    }
+
+    fn push(&mut self, id: u64, position: glam::DVec2) {
+        let trail = self.trails.entry(id).or_default();
+        if trail.last() != Some(&position) {
+            trail.push(position);
+            if trail.len() > self.max_points {
+                trail.remove(0);
+            }
+        }
+    }
+
+    pub fn get(&self, id: u64) -> &[glam::DVec2] {
+        self.trails.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (u64, &[glam::DVec2])> {
+        self.trails.iter().map(|(k, v)| (*k, v.as_slice()))
+    }
+
+    pub fn clear(&mut self) {
+        self.trails.clear();
     }
 }

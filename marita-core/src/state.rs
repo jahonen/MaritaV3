@@ -237,6 +237,43 @@ impl Ship {
     }
 }
 
+/// Convenience constructor for a default play-test ship with a single main
+/// engine and enough fuel for burns.
+pub fn default_ship(id: u64, name: &str, position: DVec2, velocity: DVec2) -> Ship {
+    Ship {
+        id,
+        name: name.into(),
+        dry_mass: 1000.0,
+        fuel_mass: 2000.0,
+        position,
+        velocity,
+        orientation: 0.0,
+        angular_velocity: 0.0,
+        moment_of_inertia: 10000.0,
+        engine_mounts: vec![EngineMount {
+            local_position: DVec2::ZERO,
+            max_thrust: 5000.0,
+            specific_impulse: 300.0,
+            max_mass_flow: 1.7,
+            gimbal: 0.0,
+        }],
+        sensor_arrays: vec![SensorArray {
+            local_position: DVec2::ZERO,
+            bearing: 0.0,
+            field_of_view: std::f64::consts::PI / 2.0,
+            bands: [true; SPECTRUM_BINS],
+            aperture_area: 0.1,
+            noise_floor: 1.0,
+            integration_time: 1.0,
+            min_snr: 1.0,
+        }],
+        emitters: vec![],
+        thermal: ThermalState::new(300.0, 1.0e6, 10.0),
+        collision_response: CollisionResponse::Bounce { restitution: 0.5 },
+        albedo: Spectrum::zero(),
+    }
+}
+
 /// An expanding arc-segment signal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SignalArc {

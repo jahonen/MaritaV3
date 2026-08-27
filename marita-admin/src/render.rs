@@ -79,6 +79,27 @@ impl Viewport {
     }
 }
 
+pub fn draw_trails(painter: &Painter, viewport: &Viewport, history: &crate::state::TrailHistory) {
+    for (_id, points) in history.iter() {
+        if points.len() < 2 {
+            continue;
+        }
+        let screen_points: Vec<Pos2> = points
+            .iter()
+            .map(|p| viewport.world_to_screen(*p))
+            .collect();
+        // Fade the trail from old (dim) to new (bright).
+        for window in screen_points.windows(2) {
+            let a = window[0];
+            let b = window[1];
+            let alpha = ((window.len() as f32) / (screen_points.len() as f32) * 200.0 + 20.0)
+                .clamp(20.0, 220.0) as u8;
+            let color = Color32::from_rgba_unmultiplied(200, 200, 200, alpha);
+            painter.line_segment([a, b], Stroke::new(1.0_f32, color));
+        }
+    }
+}
+
 pub fn draw_bodies(
     painter: &Painter,
     viewport: &Viewport,

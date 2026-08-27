@@ -13,3 +13,4 @@ marita-grpc = { path = "../marita-grpc" }
 clap = { version = "4.5", features = ["derive"] }
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
 anyhow = "1.0"
+glam = "0.29"

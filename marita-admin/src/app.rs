@@ -1,8 +1,10 @@
 //! Main egui application state and UI logic.
 
-use crate::client::spawn_client;
-use crate::render::{draw_bodies, draw_ships, draw_signals, Grid, Viewport};
-use crate::state::ViewerState;
+use crate::client::{spawn_client, CommandHandle};
+use crate::render::{draw_bodies, draw_ships, draw_signals, draw_trails, Grid, Viewport};
+use crate::state::{TrailHistory, ViewerState};
+use marita_grpc::proto::ShipCommand;
+use std::collections::HashMap;
 use std::sync::mpsc;
 
 pub struct AdminApp {
@@ -10,6 +12,7 @@ pub struct AdminApp {
     _runtime: tokio::runtime::Runtime,
     addr: String,
     state_rx: mpsc::Receiver<ViewerState>,
+    command_handle: CommandHandle,
     latest: Option<ViewerState>,
     status: String,
     viewport: Viewport,
@@ -17,6 +20,9 @@ pub struct AdminApp {
     show_labels: bool,
     follow_selection: bool,
     selected_entity: Option<u64>,
+    ship_controls: HashMap<u64, ShipControlState>,
+    show_trails: bool,
+    trail_history: TrailHistory,
     realtime_elapsed: f64,
     sim_time: f64,
     tick: u64,
@@ -25,12 +31,13 @@ pub struct AdminApp {
 impl AdminApp {
     pub fn new(_cc: &eframe::CreationContext<'_>, addr: String) -> Self {
         let (state_tx, state_rx) = mpsc::channel();
-        let runtime = spawn_client(addr.clone(), state_tx);
+        let (runtime, command_handle) = spawn_client(addr.clone(), state_tx);
 
         Self {
             _runtime: runtime,
             addr,
             state_rx,
+            command_handle,
             latest: None,
             status: "Connecting...".into(),
             viewport: Viewport::fit_system(),
@@ -38,6 +45,9 @@ impl AdminApp {
             show_labels: true,
             follow_selection: false,
             selected_entity: None,
+            ship_controls: HashMap::new(),
+            show_trails: true,
+            trail_history: TrailHistory::new(500),
             realtime_elapsed: 0.0,
             sim_time: 0.0,
             tick: 0,
@@ -49,6 +59,7 @@ impl AdminApp {
         while let Ok(state) = self.state_rx.try_recv() {
             self.sim_time = state.sim_time;
             self.tick = state.tick;
+            self.trail_history.update(&state);
             self.latest = Some(state);
             received = true;
         }
@@ -80,11 +91,47 @@ impl AdminApp {
         }
         best.map(|(id, _)| id)
     }
+
+    fn control_state(&mut self, ship_id: u64) -> &mut ShipControlState {
+        self.ship_controls.entry(ship_id).or_default()
+    }
+
+    fn send_command(&self, ship_id: u64, control: &ShipControlState) {
+        let cmd = ShipCommand {
+            tick: 0,
+            ship_id,
+            throttle: control.throttle,
+            gimbal: control.gimbal,
+            emitters: vec![],
+        };
+        self.command_handle.push(cmd);
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct ShipControlState {
+    throttle: f64,
+    gimbal: f64,
 }
 
 impl eframe::App for AdminApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.try_recv_state();
+
+        // Continuously send the current control state for the selected ship so
+        // burns persist across engine ticks.
+        let maybe_ship_id = self.latest.as_ref().and_then(|state| {
+            state
+                .ships
+                .iter()
+                .find(|s| Some(s.id) == self.selected_entity)
+                .map(|s| s.id)
+        });
+        if let Some(ship_id) = maybe_ship_id {
+            let control = self.control_state(ship_id).clone();
+            self.send_command(ship_id, &control);
+        }
+
         self.realtime_elapsed += ctx.input(|i| i.stable_dt) as f64;
 
         egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
@@ -103,6 +150,7 @@ impl eframe::App for AdminApp {
             .default_width(220.0)
             .show(ctx, |ui| {
                 ui.heading("View");
+                ui.checkbox(&mut self.show_trails, "Trails");
                 ui.checkbox(&mut self.show_signals, "Show signals");
                 ui.checkbox(&mut self.show_labels, "Labels");
                 ui.checkbox(&mut self.follow_selection, "Follow selected");
@@ -125,6 +173,38 @@ impl eframe::App for AdminApp {
                     ui.label(format!("Entity: {}", id));
                 } else {
                     ui.label("None");
+                }
+
+                let selected_ship_id = self.latest.as_ref().and_then(|state| {
+                    self.selected_entity
+                        .and_then(|id| state.ships.iter().find(|s| s.id == id).map(|s| s.id))
+                });
+
+                if let Some(ship_id) = selected_ship_id {
+                    ui.separator();
+                    ui.heading("Ship Control");
+                    let control = self.control_state(ship_id).clone();
+
+                    let mut control = control;
+                    let mut changed = false;
+
+                    ui.label("Throttle");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut control.throttle, 0.0..=1.0))
+                        .changed();
+
+                    ui.label("Gimbal (rad)");
+                    changed |= ui
+                        .add(egui::Slider::new(
+                            &mut control.gimbal,
+                            -std::f64::consts::PI..=std::f64::consts::PI,
+                        ))
+                        .changed();
+
+                    if changed {
+                        self.send_command(ship_id, &control);
+                    }
+                    *self.control_state(ship_id) = control;
                 }
 
                 if let Some(state) = &self.latest {
@@ -196,6 +276,10 @@ impl eframe::App for AdminApp {
 
             let painter = ui.painter_at(rect);
             Grid::draw(&painter, &self.viewport);
+
+            if self.show_trails {
+                draw_trails(&painter, &self.viewport, &self.trail_history);
+            }
 
             if let Some(state) = &self.latest {
                 draw_bodies(

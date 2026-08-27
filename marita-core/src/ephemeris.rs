@@ -7,10 +7,178 @@
 use crate::state::{Body, CollisionResponse, Spectrum, ThermalState};
 use crate::units::{AU, SOLAR_MASS, SOLAR_RADIUS, SUN_EFFECTIVE_TEMPERATURE};
 use glam::DVec2;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::path::Path;
 
 /// Trait for loading the initial solar-system bodies at a given epoch.
 pub trait EphemerisLoader {
     fn load(&self) -> Vec<Body>;
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum EphemerisError {
+    #[error("failed to read ephemeris file: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("failed to parse ephemeris JSON: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
+/// Loader that reads a JSON snapshot produced by `scripts/generate_ephemeris.py`.
+///
+/// The JSON is expected to contain 3D state vectors in a heliocentric/ecliptic
+/// frame. The loader projects positions and velocities onto the ecliptic (XY)
+/// plane because MaritaV3 is a 2D engine. Body masses are filled from a built-in
+/// table; if a body is not in the table it receives zero mass.
+pub struct JsonFileLoader {
+    pub path: std::path::PathBuf,
+}
+
+impl JsonFileLoader {
+    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+        Self {
+            path: path.as_ref().to_path_buf(),
+        }
+    }
+
+    pub fn load_result(&self) -> Result<Vec<Body>, EphemerisError> {
+        let text = std::fs::read_to_string(&self.path)?;
+        let snapshot: EphemerisSnapshot = serde_json::from_str(&text)?;
+
+        let mut bodies = Vec::new();
+        for entry in snapshot.bodies {
+            let mass = known_mass(entry.id, &entry.name);
+            bodies.push(make_body(
+                entry.id as u64,
+                &entry.name,
+                mass,
+                entry.radius,
+                DVec2::new(entry.position.x, entry.position.y),
+                DVec2::new(entry.velocity.x, entry.velocity.y),
+                effective_temperature(&entry.name),
+            ));
+        }
+        Ok(bodies)
+    }
+}
+
+impl EphemerisLoader for JsonFileLoader {
+    fn load(&self) -> Vec<Body> {
+        self.load_result().unwrap_or_else(|e| {
+            eprintln!(
+                "failed to load ephemeris from {}: {e}; using circular fallback",
+                self.path.display()
+            );
+            CircularOrbitLoader.load()
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct EphemerisSnapshot {
+    #[allow(dead_code)]
+    epoch: String,
+    #[allow(dead_code)]
+    frame: String,
+    #[allow(dead_code)]
+    observer: String,
+    bodies: Vec<BodySnapshot>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BodySnapshot {
+    id: i64,
+    name: String,
+    #[allow(dead_code)]
+    mass: f64,
+    position: Vec3Snapshot,
+    velocity: Vec3Snapshot,
+    radius: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct Vec3Snapshot {
+    x: f64,
+    y: f64,
+    #[allow(dead_code)]
+    z: f64,
+}
+
+fn known_mass(_id: i64, name: &str) -> f64 {
+    // Approximate masses in kg for major bodies. SPICE does not provide masses,
+    // so we use a hard-coded lookup table.
+    let table: HashMap<&str, f64> = [
+        ("Sun", 1.98847e30),
+        ("Mercury", 3.3011e23),
+        ("Venus", 4.8675e24),
+        ("Earth", 5.9723e24),
+        ("Moon", 7.3477e22),
+        ("Mars", 6.4171e23),
+        ("Phobos", 1.0659e16),
+        ("Deimos", 1.4762e15),
+        ("Jupiter", 1.8982e27),
+        ("Io", 8.9319e22),
+        ("Europa", 4.7998e22),
+        ("Ganymede", 1.4819e23),
+        ("Callisto", 1.0759e23),
+        ("Saturn", 5.6834e26),
+        ("Mimas", 3.7493e19),
+        ("Enceladus", 1.0802e20),
+        ("Tethys", 6.1745e20),
+        ("Dione", 1.0955e21),
+        ("Rhea", 2.3065e21),
+        ("Titan", 1.3452e23),
+        ("Hyperion", 5.62e18),
+        ("Iapetus", 1.8056e21),
+        ("Phoebe", 8.292e18),
+        ("Uranus", 8.6810e25),
+        ("Miranda", 6.59e19),
+        ("Ariel", 1.353e21),
+        ("Umbriel", 1.172e21),
+        ("Titania", 3.527e21),
+        ("Oberon", 3.014e21),
+        ("Neptune", 1.02413e26),
+        ("Triton", 2.14e22),
+        ("Nereid", 3.1e19),
+        ("Naiad", 1.9e17),
+        ("Thalassa", 3.5e17),
+        ("Despina", 2.1e18),
+        ("Galatea", 2.12e18),
+        ("Larissa", 4.95e18),
+        ("Proteus", 4.4e19),
+        ("Pluto", 1.303e22),
+        ("Charon", 1.586e21),
+        ("Ceres", 9.3835e20),
+        ("Pallas", 2.11e20),
+        ("Vesta", 2.5908e20),
+        ("Hygiea", 8.32e19),
+        ("Psyche", 2.29e19),
+        ("Davida", 3.66e19),
+        ("Interamnia", 3.5e19),
+        ("Europa", 3.2e19), // asteroid 52 Europa
+        ("Sylvia", 1.478e19),
+    ]
+    .iter()
+    .copied()
+    .collect();
+
+    table.get(name).copied().unwrap_or(0.0)
+}
+
+fn effective_temperature(name: &str) -> f64 {
+    match name {
+        "Sun" => SUN_EFFECTIVE_TEMPERATURE,
+        "Mercury" => 440.0,
+        "Venus" => 737.0,
+        "Earth" => 288.0,
+        "Moon" => 250.0,
+        "Mars" => 210.0,
+        "Jupiter" => 165.0,
+        "Saturn" => 134.0,
+        "Uranus" => 76.0,
+        "Neptune" => 72.0,
+        _ => 100.0,
+    }
 }
 
 /// Simplified circular-orbit loader for development and unit tests.
