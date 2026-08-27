@@ -30,6 +30,9 @@ belief in the imagination of kids made everything feel possible.
   bounce.
 - **API:** gRPC service with bidirectional command streaming and full-state
   snapshots.
+- **Admin Viewer:** local `egui`/`eframe` gods-eye visualizer that connects to
+  the running gRPC server. It handles extreme scales (AU down to meters) with
+  zoom/pan, labels, grid, and entity selection.
 
 ## Quick Start
 
@@ -43,8 +46,11 @@ cargo test --workspace
 # Run a short local scenario
 cargo run --bin marita -- scenario --ticks 100
 
-# Start the gRPC server
+# Start the gRPC server (in one terminal)
 cargo run --bin marita -- serve --addr 127.0.0.1:50051
+
+# Launch the admin viewer (in another terminal)
+cargo run --bin marita-admin -- --addr http://127.0.0.1:50051
 ```
 
 ## Project Structure
@@ -54,6 +60,7 @@ maritav3/
 ├── marita-core/    # Pure physics simulation (deterministic, no I/O)
 ├── marita-grpc/    # gRPC service wrapper
 ├── marita-cli/     # CLI harness
+├── marita-admin/   # Local egui gods-eye viewer
 ├── docs/           # Component and service documentation
 └── START_HERE.md   # Contributor onboarding guide
 ```

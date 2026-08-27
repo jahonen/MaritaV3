@@ -66,3 +66,19 @@ This document lists every modular unit of functionality in the MaritaV3 space si
 - **Outputs:** Next `SimulationState`.
 - **Side effects:** None.
 - **Lifecycle:** alpha
+
+## Admin Viewer Components
+
+### `AdminApp`
+- **Purpose:** Local egui/eframe gods-eye visualization of a running engine.
+- **Inputs:** gRPC tick stream from `MaritaEngine`.
+- **Outputs:** Rendered 2D view of bodies, ships, signals; user selection and view controls.
+- **Side effects:** Network connection to gRPC server; GUI rendering.
+- **Lifecycle:** alpha
+
+### `Viewport`
+- **Purpose:** Maps simulation world coordinates (meters) to screen pixels with pan/zoom.
+- **Inputs:** World positions, zoom level, screen size.
+- **Outputs:** Screen positions and visible sizes that handle AU-to-meter scale ranges.
+- **Side effects:** None.
+- **Lifecycle:** alpha

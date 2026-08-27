@@ -27,3 +27,11 @@ A command-line harness for local runs, replays, and scripted scenarios. Not a ne
 - **Inputs:** Subcommands (`run`, `replay`, `benchmark`).
 - **Outputs:** Console output, optionally JSON logs.
 - **Side effects:** Spawns the gRPC server, writes logs.
+
+## `MaritaAdmin`
+
+A local GUI viewer built with `egui`/`eframe` that consumes the `MaritaEngine` gRPC stream.
+
+- **Inputs:** `MaritaEngine::StreamCommands` (empty command stream) or `GetState` snapshots.
+- **Outputs:** Real-time 2D visualization with pan/zoom, labels, grid, and entity selection.
+- **Side effects:** Connects to the gRPC server over the network; renders GUI.

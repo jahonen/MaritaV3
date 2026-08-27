@@ -11,6 +11,7 @@ maritav3/
 ├── marita-core/   # Pure physics simulation (no I/O, deterministic)
 ├── marita-grpc/   # gRPC service wrapper
 ├── marita-cli/    # CLI harness
+├── marita-admin/  # Local egui gods-eye viewer
 ├── docs/          # Component and service docs
 └── Cargo.toml     # Workspace manifest
 ```
@@ -28,8 +29,11 @@ cargo test --workspace
 # Run a short local scenario
 cargo run --bin marita -- scenario --ticks 100
 
-# Start the gRPC server
+# Start the gRPC server (in one terminal)
 cargo run --bin marita -- serve --addr 127.0.0.1:50051
+
+# Launch the admin viewer (in another terminal)
+cargo run --bin marita-admin -- --addr http://127.0.0.1:50051
 ```
 
 ## Architecture

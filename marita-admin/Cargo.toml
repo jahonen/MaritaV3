@@ -1,0 +1,21 @@
+[package]
+name = "marita-admin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "marita-admin"
+path = "src/main.rs"
+
+[dependencies]
+marita-grpc = { path = "../marita-grpc" }
+marita-core = { path = "../marita-core" }
+eframe = { version = "0.29", features = ["default"] }
+egui = "0.29"
+glam = "0.29"
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
+tokio-stream = "0.1"
+tonic = "0.12"
+futures = "0.3"
+anyhow = "1.0"
