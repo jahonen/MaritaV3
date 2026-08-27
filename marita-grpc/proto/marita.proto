@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package marita;
+
+service MaritaEngine {
+  rpc StreamCommands(stream ShipCommand) returns (stream SimulationTick);
+  rpc GetState(GetStateRequest) returns (SimulationState);
+}
+
+message ShipCommand {
+  uint64 tick = 1;
+  uint64 ship_id = 2;
+  double throttle = 3;
+  double gimbal = 4;
+  repeated EmitterCommand emitters = 5;
+}
+
+message EmitterCommand {
+  uint64 emitter_index = 1;
+  bool active = 2;
+}
+
+message GetStateRequest {
+  uint64 tick = 1;
+}
+
+message Vec2 {
+  double x = 1;
+  double y = 2;
+}
+
+message Body {
+  uint64 id = 1;
+  string name = 2;
+  double mass = 3;
+  Vec2 position = 4;
+  Vec2 velocity = 5;
+  double radius = 6;
+}
+
+message Ship {
+  uint64 id = 1;
+  string name = 2;
+  double dry_mass = 3;
+  double fuel_mass = 4;
+  Vec2 position = 5;
+  Vec2 velocity = 6;
+  double orientation = 7;
+  double angular_velocity = 8;
+}
+
+message SignalArc {
+  uint64 id = 1;
+  Vec2 origin = 2;
+  double direction = 3;
+  double angular_width = 4;
+  double inner_radius = 5;
+  double outer_radius = 6;
+  Spectrum spectrum = 7;
+  optional uint64 source_id = 8;
+  uint32 generation = 9;
+}
+
+message Spectrum {
+  repeated double bins = 1;
+}
+
+message Detection {
+  optional uint64 source_id = 1;
+  uint32 wavelength_bin = 2;
+  double bearing = 3;
+  double strength = 4;
+  double snr = 5;
+}
+
+message SimulationTick {
+  uint64 tick = 1;
+  double sim_time = 2;
+  repeated Body bodies = 3;
+  repeated Ship ships = 4;
+  repeated SignalArc signals = 5;
+  repeated ShipDetections ship_detections = 6;
+}
+
+message ShipDetections {
+  uint64 ship_id = 1;
+  repeated Detection detections = 2;
+}
+
+message SimulationState {
+  uint64 tick = 1;
+  double sim_time = 2;
+  repeated Body bodies = 3;
+  repeated Ship ships = 4;
+  repeated SignalArc signals = 5;
+}
