@@ -30,6 +30,10 @@ enum Commands {
         /// Number of default play-test ships to spawn near Earth.
         #[arg(long, default_value = "1")]
         ships: usize,
+
+        /// Load an initial state from a checkpoint file instead of ephemeris.
+        #[arg(long, value_name = "PATH")]
+        checkpoint_in: Option<PathBuf>,
     },
     /// Run a scripted local scenario.
     Scenario {
@@ -44,6 +48,14 @@ enum Commands {
         /// Number of default play-test ships to spawn near Earth.
         #[arg(long, default_value = "1")]
         ships: usize,
+
+        /// Load an initial state from a checkpoint file instead of ephemeris.
+        #[arg(long, value_name = "PATH")]
+        checkpoint_in: Option<PathBuf>,
+
+        /// Save the final state to a checkpoint file after running.
+        #[arg(long, value_name = "PATH")]
+        checkpoint_out: Option<PathBuf>,
     },
 }
 
@@ -55,22 +67,37 @@ async fn main() -> anyhow::Result<()> {
             addr,
             ephemeris,
             ships,
+            checkpoint_in,
         } => {
             let addr: std::net::SocketAddr = addr.parse()?;
-            let mut state = SimulationState::new();
-            state.bodies = load_ephemeris(&ephemeris);
-            state.ships = spawn_play_ships(&state.bodies, ships);
+            let mut state = if let Some(path) = checkpoint_in {
+                println!("Loading checkpoint from {}", path.display());
+                SimulationState::load(path).map_err(|e| anyhow::anyhow!(e))?
+            } else {
+                let mut s = SimulationState::new();
+                s.bodies = load_ephemeris(&ephemeris);
+                s.ships = spawn_play_ships(&s.bodies, ships);
+                s
+            };
             marita_grpc::server::run(addr, state).await?;
         }
         Commands::Scenario {
             ticks,
             ephemeris,
             ships,
+            checkpoint_in,
+            checkpoint_out,
         } => {
             println!("Running scenario for {ticks} ticks");
-            let mut state = SimulationState::new();
-            state.bodies = load_ephemeris(&ephemeris);
-            state.ships = spawn_play_ships(&state.bodies, ships);
+            let mut state = if let Some(path) = checkpoint_in {
+                println!("Loading checkpoint from {}", path.display());
+                SimulationState::load(path).map_err(|e| anyhow::anyhow!(e))?
+            } else {
+                let mut s = SimulationState::new();
+                s.bodies = load_ephemeris(&ephemeris);
+                s.ships = spawn_play_ships(&s.bodies, ships);
+                s
+            };
             let executor = marita_core::tick::TickExecutor::new();
             for _ in 0..ticks {
                 let output = executor.step(&mut state, &[]);
@@ -81,6 +108,10 @@ async fn main() -> anyhow::Result<()> {
                     output.state.ships.len(),
                     output.state.signals.len()
                 );
+            }
+            if let Some(path) = checkpoint_out {
+                println!("Saving checkpoint to {}", path.display());
+                state.save(path).map_err(|e| anyhow::anyhow!(e))?;
             }
         }
     }

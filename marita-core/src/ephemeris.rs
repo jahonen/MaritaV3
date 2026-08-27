@@ -155,7 +155,8 @@ fn known_mass(_id: i64, name: &str) -> f64 {
         ("Psyche", 2.29e19),
         ("Davida", 3.66e19),
         ("Interamnia", 3.5e19),
-        ("Europa", 3.2e19), // asteroid 52 Europa
+        ("Europa", 4.7998e22),         // Jupiter moon; keep first as canonical
+        ("Europa (asteroid)", 3.2e19), // asteroid 52 Europa
         ("Sylvia", 1.478e19),
     ]
     .iter()

@@ -22,11 +22,19 @@ A single service exposing the simulation engine to clients over the network.
 
 ## `MaritaCli`
 
-A command-line harness for local runs, replays, and scripted scenarios. Not a network service.
+A command-line harness for local scenarios and the gRPC server. Not a network service on its own.
 
-- **Inputs:** Subcommands (`run`, `replay`, `benchmark`).
-- **Outputs:** Console output, optionally JSON logs.
-- **Side effects:** Spawns the gRPC server, writes logs.
+### `marita serve`
+- **Inputs:** `--addr`, `--ephemeris`, `--ships`, `--checkpoint-in <path>`.
+- **Outputs:** gRPC server listening on `--addr`.
+- **Side effects:** Loads ephemeris or checkpoint, spawns the gRPC server.
+
+### `marita scenario`
+- **Inputs:** `--ticks`, `--ephemeris`, `--ships`, `--checkpoint-in <path>`, `--checkpoint-out <path>`.
+- **Outputs:** Console tick log; optional JSON checkpoint file.
+- **Side effects:** Writes checkpoint file if `--checkpoint-out` is given.
+
+If `--checkpoint-in` is provided, the ephemeris and ship spawn options are ignored and the run starts from the saved state.
 
 ## `MaritaAdmin`
 

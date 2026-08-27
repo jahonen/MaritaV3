@@ -12,3 +12,7 @@ Cargo.lock
 /kernels/*.tf
 /kernels/*.bc
 /data/ephemeris.json
+
+# Simulation checkpoints (large JSON dumps)
+*.checkpoint.json
+/checkpoints/

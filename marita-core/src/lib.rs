@@ -5,6 +5,7 @@ pub mod heat;
 pub mod propulsion;
 pub mod sensor;
 pub mod signal;
+pub mod spatial;
 pub mod state;
 pub mod tick;
 pub mod units;

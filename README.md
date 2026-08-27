@@ -31,8 +31,11 @@ belief in the imagination of kids made everything feel possible.
 - **API:** gRPC service with bidirectional command streaming and full-state
   snapshots.
 - **Ephemeris:** local SPICE kernel support via `scripts/generate_ephemeris.py`
-  and `scripts/download_kernels.sh`, plus a circular-orbit fallback for
+  and `scripts/download_kernels.sh`, a JPL Horizons fallback via
+  `scripts/generate_ephemeris_horizons.py`, plus a circular-orbit fallback for
   development.
+- **Checkpoints:** full simulation state can be saved to and loaded from JSON
+  checkpoint files.
 - **Admin Viewer:** local `egui`/`eframe` gods-eye visualizer that connects to
   the running gRPC server. It handles extreme scales (AU down to meters) with
   zoom/pan, labels, grid, and entity selection.

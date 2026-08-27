@@ -69,6 +69,45 @@ If no SPICE kernels are available, use the built-in circular-orbit loader:
 cargo run --bin marita -- serve --ephemeris circular
 ```
 
+## JPL Horizons Ephemeris
+
+If you do not want to download multi-gigabyte SPICE satellite kernels, use the
+JPL Horizons web API instead:
+
+```bash
+source .venv/bin/activate
+python scripts/generate_ephemeris_horizons.py \
+  --epoch 2026-01-01T00:00:00Z \
+  --out data/ephemeris.json
+```
+
+This produces the same snapshot format as the SPICE script and covers the Sun,
+planets, major moons, and selected main-belt asteroids. Body masses and
+temperatures are filled from the built-in lookup table.
+
+## Simulation Checkpoints
+
+The full simulation state (bodies, ships, signals, clock, and next ID) can be
+saved to and loaded from JSON checkpoint files. This is useful for long runs,
+replays, and debugging.
+
+```bash
+# Save a checkpoint after a scenario run
+cargo run --bin marita -- scenario \
+  --ticks 1000 --ephemeris data/ephemeris.json --ships 1 \
+  --checkpoint-out state.json
+
+# Resume from a checkpoint
+cargo run --bin marita -- scenario --ticks 100 --checkpoint-in state.json \
+  --checkpoint-out state2.json
+
+# Start the gRPC server from a checkpoint
+cargo run --bin marita -- serve --checkpoint-in state.json
+```
+
+When `--checkpoint-in` is provided, ephemeris and ship-spawn options are
+ignored.
+
 ## gRPC Clients
 
 Any language with Protobuf support can connect to `MaritaEngine`. The primary client contract is:

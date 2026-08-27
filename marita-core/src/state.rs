@@ -9,7 +9,7 @@ use glam::DVec2;
 pub const SPECTRUM_BINS: usize = 10;
 
 /// Fixed wavelength bins used for signal spectra.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(usize)]
 pub enum WavelengthBin {
     Radio = 0,
@@ -25,7 +25,7 @@ pub enum WavelengthBin {
 }
 
 /// A per-wavelength information budget.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Spectrum {
     pub bins: [f64; SPECTRUM_BINS],
 }
@@ -76,7 +76,7 @@ impl Spectrum {
 }
 
 /// Thermal state for a massive body or ship.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ThermalState {
     /// Temperature in Kelvin.
     pub temperature: f64,
@@ -103,7 +103,7 @@ impl ThermalState {
 }
 
 /// How a body behaves when it collides with another massive object.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CollisionResponse {
     /// Bodies pass through each other (no collision handling).
     Ghost,
@@ -114,7 +114,7 @@ pub enum CollisionResponse {
 }
 
 /// A celestial body (point mass for physics, with radius for collisions/sensors).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Body {
     pub id: u64,
     pub name: String,
@@ -129,7 +129,7 @@ pub struct Body {
 }
 
 /// An engine mounted on a ship.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EngineMount {
     /// Position relative to the ship center of mass (m).
     pub local_position: DVec2,
@@ -144,7 +144,7 @@ pub struct EngineMount {
 }
 
 /// A sensor array on a ship.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SensorArray {
     pub local_position: DVec2,
     /// Center bearing relative to ship orientation (rad).
@@ -164,7 +164,7 @@ pub struct SensorArray {
 }
 
 /// An intentional signal emitter on a ship.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Emitter {
     pub local_position: DVec2,
     /// Center direction relative to ship orientation (rad).
@@ -180,7 +180,7 @@ pub struct Emitter {
 }
 
 /// A per-tick command controlling a ship.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ShipCommand {
     pub ship_id: u64,
     /// Throttle in [0, 1] applied uniformly to all engines.
@@ -203,7 +203,7 @@ impl Default for ShipCommand {
 }
 
 /// A ship represented as a 2D rigid body.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Ship {
     pub id: u64,
     pub name: String,
@@ -279,7 +279,7 @@ pub fn default_ship(id: u64, name: &str, position: DVec2, velocity: DVec2) -> Sh
 }
 
 /// An expanding arc-segment signal.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SignalArc {
     pub id: u64,
     /// Arc origin in world space.
@@ -333,7 +333,7 @@ impl SignalArc {
 }
 
 /// The complete world state at one tick.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SimulationState {
     pub tick: u64,
     pub sim_time: f64,
@@ -365,6 +365,29 @@ impl SimulationState {
         let id = self.next_id;
         self.next_id += 1;
         id
+    }
+
+    /// Serialize the state to a JSON file.
+    pub fn save(
+        &self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let file = std::fs::File::create(path)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
+        serde_json::to_writer_pretty(file, self)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
+        Ok(())
+    }
+
+    /// Deserialize the state from a JSON file.
+    pub fn load(
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let file = std::fs::File::open(path)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
+        let state = serde_json::from_reader(file)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
+        Ok(state)
     }
 }
 
@@ -410,5 +433,19 @@ mod tests {
         assert!(
             (normalize_angle(-3.0 * std::f64::consts::PI) + std::f64::consts::PI).abs() < 1e-12
         );
+    }
+
+    #[test]
+    fn checkpoint_roundtrip() {
+        let mut state = SimulationState::new();
+        state.tick = 42;
+        let tmp = std::env::temp_dir().join("marita_checkpoint_roundtrip.json");
+        state.save(&tmp).expect("save checkpoint");
+        let loaded = SimulationState::load(&tmp).expect("load checkpoint");
+        assert_eq!(loaded.tick, state.tick);
+        assert_eq!(loaded.bodies, state.bodies);
+        assert_eq!(loaded.ships, state.ships);
+        assert_eq!(loaded.signals, state.signals);
+        assert_eq!(loaded.next_id, state.next_id);
     }
 }

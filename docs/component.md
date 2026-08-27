@@ -5,10 +5,10 @@ This document lists every modular unit of functionality in the MaritaV3 space si
 ## Core Physics Components
 
 ### `SimulationState`
-- **Purpose:** Owns the entire simulation world: bodies, ships, signals, and the clock.
-- **Inputs:** Initial ephemeris, ship definitions, tick commands.
-- **Outputs:** Updated state after each tick, sensor detections.
-- **Side effects:** None (pure in-memory structure).
+- **Purpose:** Owns the entire simulation world: bodies, ships, signals, and the clock. Can be serialized to/from JSON checkpoints.
+- **Inputs:** Initial ephemeris, ship definitions, tick commands; or a checkpoint file.
+- **Outputs:** Updated state after each tick, sensor detections; JSON checkpoint files.
+- **Side effects:** Reads/writes checkpoint files when asked.
 - **Lifecycle:** alpha
 
 ### `Gravity`
@@ -61,10 +61,17 @@ This document lists every modular unit of functionality in the MaritaV3 space si
 - **Lifecycle:** alpha
 
 ### `JsonFileLoader`
-- **Purpose:** Loads an ephemeris snapshot generated from local SPICE kernels by `scripts/generate_ephemeris.py`.
+- **Purpose:** Loads an ephemeris snapshot generated from local SPICE kernels by `scripts/generate_ephemeris.py` or from JPL Horizons by `scripts/generate_ephemeris_horizons.py`.
 - **Inputs:** Path to JSON snapshot file.
 - **Outputs:** `Vec<Body>` projected onto the ecliptic plane.
 - **Side effects:** Reads file.
+- **Lifecycle:** alpha
+
+### `SpatialIndex`
+- **Purpose:** Uniform-grid spatial index for dynamic 2D entities; used to avoid O(bodies × signals) signal-clipping scans when many bodies are loaded.
+- **Inputs:** Entity positions and radii; a query center/radius or bounding box.
+- **Outputs:** Candidate entity indices for exact geometric tests.
+- **Side effects:** None.
 - **Lifecycle:** alpha
 
 ### `EphemerisLoader` (trait)
