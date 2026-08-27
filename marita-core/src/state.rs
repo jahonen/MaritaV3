@@ -239,22 +239,26 @@ impl Ship {
 
 /// Convenience constructor for a default play-test ship with a single main
 /// engine and enough fuel for burns.
+///
+/// Tuned for responsive admin-viewer demonstrations: roughly 10 m/s² initial
+/// acceleration and ~4 km/s Δv budget, enough to escape low Earth orbit in
+/// a few tens of seconds of real time.
 pub fn default_ship(id: u64, name: &str, position: DVec2, velocity: DVec2) -> Ship {
     Ship {
         id,
         name: name.into(),
-        dry_mass: 1000.0,
-        fuel_mass: 2000.0,
+        dry_mass: 500.0,
+        fuel_mass: 1500.0,
         position,
         velocity,
         orientation: 0.0,
         angular_velocity: 0.0,
-        moment_of_inertia: 10000.0,
+        moment_of_inertia: 5000.0,
         engine_mounts: vec![EngineMount {
             local_position: DVec2::ZERO,
-            max_thrust: 5000.0,
+            max_thrust: 20_000.0,
             specific_impulse: 300.0,
-            max_mass_flow: 1.7,
+            max_mass_flow: 6.8,
             gimbal: 0.0,
         }],
         sensor_arrays: vec![SensorArray {

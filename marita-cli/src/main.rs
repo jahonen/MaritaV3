@@ -92,20 +92,29 @@ fn spawn_play_ships(
     count: usize,
 ) -> Vec<marita_core::state::Ship> {
     let earth = bodies.iter().find(|b| b.name == "Earth");
-    let (base_pos, base_vel) = earth
-        .map(|b| (b.position, b.velocity))
-        .unwrap_or((DVec2::new(AU, 0.0), DVec2::new(0.0, 29_780.0)));
+    let (base_pos, base_vel, earth_mass) = earth
+        .map(|b| (b.position, b.velocity, b.mass))
+        .unwrap_or((DVec2::new(AU, 0.0), DVec2::new(0.0, 29_780.0), 5.9723e24));
+
+    // Place ships in a low Earth orbit (altitude ~ 630 km, r = 7.0e6 m).
+    let orbital_radius = 7.0e6;
+    let orbital_speed =
+        (marita_core::units::GRAVITATIONAL_CONSTANT * earth_mass / orbital_radius).sqrt();
 
     let mut ships = Vec::new();
     for i in 0..count {
-        let offset = DVec2::new(1.0e6 + i as f64 * 500.0, 0.0);
+        // Spread ships around Earth at evenly spaced true anomalies.
+        let angle = (i as f64 / count.max(1) as f64) * 2.0 * std::f64::consts::PI;
+        let offset = DVec2::new(angle.cos(), angle.sin()) * orbital_radius;
         let ship_pos = base_pos + offset;
-        let orbital_v = base_vel + DVec2::new(0.0, 1_000.0 + i as f64 * 100.0);
+        // Velocity is Earth's heliocentric velocity plus tangential LEO velocity.
+        let tangent = DVec2::new(-angle.sin(), angle.cos());
+        let ship_vel = base_vel + tangent * orbital_speed;
         ships.push(default_ship(
             1000 + i as u64,
             &format!("play-ship-{i}"),
             ship_pos,
-            orbital_v,
+            ship_vel,
         ));
     }
     ships
