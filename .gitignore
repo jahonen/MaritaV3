@@ -1,3 +1,14 @@
 /target/
 **/*.rs.bk
 Cargo.lock
+
+# Python tooling
+/.venv/
+
+# Large downloaded SPICE kernels and generated snapshots
+/kernels/*.bsp
+/kernels/*.tpc
+/kernels/*.tls
+/kernels/*.tf
+/kernels/*.bc
+/data/ephemeris.json

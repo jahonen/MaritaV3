@@ -12,29 +12,41 @@ This avoids a native CSPICE build dependency in the Rust service.
 
 ### Required Kernels
 
-Download from [NASA NAIF](https://naif.jpl.nasa.gov/naif/data.html):
+Download from [NASA NAIF](https://naif.jpl.nasa.gov/naif/data.html) or use the helper:
 
+```bash
+# Lite set (~120 MB): Sun, Mercury, Venus, Earth, Moon
+scripts/download_kernels.sh lite
+
+# Full set (~several GB): adds major planet moons
+scripts/download_kernels.sh full
+```
+
+The lite set contains:
 - `de440.bsp` — planetary ephemeris.
 - `pck00011.tpc` — physical constants and radii.
 - `naif0012.tls` — leap seconds.
 
-For major moons you may also need a satellite ephemeris kernel (e.g., `jup365.bsp`,
-`sat441.bsp`, etc.).
+The full set adds satellite ephemeris kernels (`mar097.bsp`, `jup365.bsp`,
+`sat441.bsp`, `ura111.bsp`, `nep081.bsp`, `plu055.bsp`).
 
 ### Generate a Snapshot
 
+Use the Python virtual environment created in the repo:
+
 ```bash
-pip install -r scripts/requirements.txt  # installs spiceypy
-mkdir kernels
-cp /path/to/de440.bsp kernels/
-cp /path/to/pck00011.tpc kernels/
-cp /path/to/naif0012.tls kernels/
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r scripts/requirements.txt  # installs spiceypy
 
 python scripts/generate_ephemeris.py \
   --kernels-dir ./kernels \
   --epoch 2026-01-01T00:00:00Z \
   --out data/ephemeris.json
 ```
+
+The script skips targets not covered by the loaded kernels (e.g., moons from a
+satellite kernel that is not present).
 
 ### Use the Snapshot
 
