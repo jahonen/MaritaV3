@@ -1,7 +1,9 @@
 //! Main egui application state and UI logic.
 
 use crate::client::{spawn_client, CommandHandle};
-use crate::render::{draw_bodies, draw_ships, draw_signals, draw_trails, Grid, Viewport};
+use crate::render::{
+    draw_bodies, draw_orbits, draw_ships, draw_signals, draw_trails, Grid, Viewport,
+};
 use crate::state::{TrailHistory, ViewerState};
 use marita_grpc::proto::ShipCommand;
 use std::collections::HashMap;
@@ -17,6 +19,7 @@ pub struct AdminApp {
     status: String,
     viewport: Viewport,
     show_signals: bool,
+    show_orbits: bool,
     show_labels: bool,
     follow_selection: bool,
     selected_entity: Option<u64>,
@@ -42,6 +45,7 @@ impl AdminApp {
             status: "Connecting...".into(),
             viewport: Viewport::fit_system(),
             show_signals: true,
+            show_orbits: true,
             show_labels: true,
             follow_selection: false,
             selected_entity: None,
@@ -152,7 +156,8 @@ impl eframe::App for AdminApp {
             .show(ctx, |ui| {
                 ui.heading("View");
                 ui.checkbox(&mut self.show_trails, "Trails");
-                ui.checkbox(&mut self.show_signals, "Show signals");
+                ui.checkbox(&mut self.show_signals, "Show active signals");
+                ui.checkbox(&mut self.show_orbits, "Orbits");
                 ui.checkbox(&mut self.show_labels, "Labels");
                 ui.checkbox(&mut self.follow_selection, "Follow selected");
 
@@ -283,6 +288,9 @@ impl eframe::App for AdminApp {
             }
 
             if let Some(state) = &self.latest {
+                if self.show_orbits {
+                    draw_orbits(&painter, &self.viewport, state);
+                }
                 draw_bodies(
                     &painter,
                     &self.viewport,

@@ -130,6 +130,25 @@ pub fn draw_bodies(
     }
 }
 
+pub fn draw_orbits(painter: &Painter, viewport: &Viewport, state: &ViewerState) {
+    let sun_pos = state
+        .bodies
+        .iter()
+        .find(|b| b.name.eq_ignore_ascii_case("sun"))
+        .map(|b| b.position)
+        .unwrap_or(DVec2::ZERO);
+    let sun_screen = viewport.world_to_screen(sun_pos);
+    let stroke = Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(80, 80, 100, 80));
+
+    for body in &state.bodies {
+        let r = (body.position - sun_pos).length() * viewport.zoom;
+        if r < 1.0 {
+            continue;
+        }
+        painter.circle_stroke(sun_screen, r as f32, stroke);
+    }
+}
+
 pub fn draw_ships(
     painter: &Painter,
     viewport: &Viewport,
