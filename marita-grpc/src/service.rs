@@ -182,6 +182,15 @@ fn convert_ship(ship: &Ship) -> proto::Ship {
         velocity: Some(convert_vec2(&ship.velocity)),
         orientation: ship.orientation,
         angular_velocity: ship.angular_velocity,
+        emitters: ship
+            .emitters
+            .iter()
+            .map(|e| proto::Emitter {
+                wavelength_bin: e.wavelength_bin as u32,
+                angular_width: e.angular_width,
+                active: e.active,
+            })
+            .collect(),
     }
 }
 

@@ -25,6 +25,15 @@ pub struct Ship {
     pub velocity: glam::DVec2,
     pub orientation: f64,
     pub angular_velocity: f64,
+    pub emitters: Vec<Emitter>,
+}
+
+/// An intentional signal emitter on a ship.
+#[derive(Clone, Debug)]
+pub struct Emitter {
+    pub wavelength_bin: u32,
+    pub angular_width: f64,
+    pub active: bool,
 }
 
 impl Ship {
@@ -114,6 +123,15 @@ fn convert_ship(s: proto::Ship) -> Ship {
         velocity: vel,
         orientation: s.orientation,
         angular_velocity: s.angular_velocity,
+        emitters: s
+            .emitters
+            .into_iter()
+            .map(|e| Emitter {
+                wavelength_bin: e.wavelength_bin,
+                angular_width: e.angular_width,
+                active: e.active,
+            })
+            .collect(),
     }
 }
 

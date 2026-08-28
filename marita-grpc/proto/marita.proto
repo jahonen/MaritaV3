@@ -38,6 +38,12 @@ message Body {
   double radius = 6;
 }
 
+message Emitter {
+  uint32 wavelength_bin = 1;
+  double angular_width = 2;
+  bool active = 3;
+}
+
 message Ship {
   uint64 id = 1;
   string name = 2;
@@ -47,6 +53,7 @@ message Ship {
   Vec2 velocity = 6;
   double orientation = 7;
   double angular_velocity = 8;
+  repeated Emitter emitters = 9;
 }
 
 message SignalArc {

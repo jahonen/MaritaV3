@@ -8,6 +8,7 @@
 use crate::spatial_tree::{Aabb, Quadtree};
 use crate::state::{
     normalize_angle, Body, CollisionResponse, Ship, SignalArc, SimulationState, Spectrum,
+    WavelengthBin,
 };
 use crate::units::{SOLAR_SYSTEM_BOUNDARY, SPEED_OF_LIGHT};
 use glam::DVec2;
@@ -444,6 +445,12 @@ pub fn cull_signals_past_sensors(
 }
 
 fn can_reach_sensor(arc: &SignalArc, ships: &[Ship], boundary: f64) -> bool {
+    // Engine plumes are short-lived and visually/tactically important; keep
+    // them even when no other sensor is directly in the plume path.
+    if arc.spectrum.bins[WavelengthBin::EngineThermal as usize] > 0.0 {
+        return true;
+    }
+
     // Maximum distance the arc will reach before it degrades or hits the
     // simulation boundary. Use the slowest-degrading bin to be conservative.
     let min_rate = arc
@@ -486,7 +493,7 @@ fn can_reach_sensor(arc: &SignalArc, ships: &[Ship], boundary: f64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{Body, CollisionResponse, ThermalState, WavelengthBin};
+    use crate::state::{Body, CollisionResponse, ThermalState};
 
     fn test_body(id: u64, x: f64, y: f64, radius: f64) -> Body {
         Body {

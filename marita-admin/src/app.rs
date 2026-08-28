@@ -101,12 +101,20 @@ impl AdminApp {
     }
 
     fn send_command(&self, ship_id: u64, control: &ShipControlState) {
+        let emitters = control
+            .emitter_states
+            .iter()
+            .map(|(&idx, &active)| marita_grpc::proto::EmitterCommand {
+                emitter_index: idx as u64,
+                active,
+            })
+            .collect();
         let cmd = ShipCommand {
             tick: 0,
             ship_id,
             throttle: control.throttle,
             gimbal: control.gimbal,
-            emitters: vec![],
+            emitters,
         };
         self.command_handle.push(cmd);
     }
@@ -116,6 +124,8 @@ impl AdminApp {
 struct ShipControlState {
     throttle: f64,
     gimbal: f64,
+    /// Per-emitter active flags, keyed by emitter index.
+    emitter_states: HashMap<usize, bool>,
 }
 
 impl eframe::App for AdminApp {
@@ -242,6 +252,50 @@ impl eframe::App for AdminApp {
                                 }
                             }
                         });
+                }
+            });
+
+        egui::SidePanel::right("emitter_controls")
+            .default_width(220.0)
+            .show(ctx, |ui| {
+                ui.heading("Emitters");
+                let selected_id = self.selected_entity;
+                let emitter_defaults: Vec<_> = self
+                    .latest
+                    .as_ref()
+                    .and_then(|state| {
+                        selected_id.and_then(|id| {
+                            state
+                                .ships
+                                .iter()
+                                .find(|s| s.id == id)
+                                .map(|s| s.emitters.clone())
+                        })
+                    })
+                    .unwrap_or_default();
+
+                if let Some(ship_id) = selected_id {
+                    if emitter_defaults.is_empty() {
+                        ui.label("Selected ship has no emitters.");
+                    } else {
+                        let mut control = self.control_state(ship_id).clone();
+                        let mut changed = false;
+
+                        // Seed the control map with the ship's current emitter
+                        // defaults so toggles reflect the real initial state.
+                        for (idx, emitter) in emitter_defaults.iter().enumerate() {
+                            let entry = control.emitter_states.entry(idx).or_insert(emitter.active);
+                            let label = format!("Emitter {} ({:?})", idx, emitter.wavelength_bin);
+                            changed |= ui.checkbox(entry, &label).changed();
+                        }
+
+                        if changed {
+                            self.send_command(ship_id, &control);
+                        }
+                        *self.control_state(ship_id) = control;
+                    }
+                } else {
+                    ui.label("Select a ship to control emitters.");
                 }
             });
 
