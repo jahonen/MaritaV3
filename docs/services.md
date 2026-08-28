@@ -20,6 +20,12 @@ A single service exposing the simulation engine to clients over the network.
 - **Outputs:** Full `SimulationState` snapshot.
 - **Side effects:** None (read-only).
 
+#### `StreamLunaView`
+- **Type:** Server-side streaming.
+- **Inputs:** `LunaViewRequest` (empty).
+- **Outputs:** Stream of `LunaDetections` messages: tick, sim time, and the list of `Detection` events from an omnidirectional sensor at Luna.
+- **Side effects:** None (read-only). Provides a restricted, ship-client-compatible view that contains only bearings, distances, wavelengths, and strengths — no absolute coordinates.
+
 ## `MaritaCli`
 
 A command-line harness for local scenarios and the gRPC server. Not a network service on its own.
@@ -46,5 +52,13 @@ If `--checkpoint-in` is provided, the ephemeris and ship spawn options are ignor
 A local GUI viewer built with `egui`/`eframe` that consumes the `MaritaEngine` gRPC stream.
 
 - **Inputs:** `MaritaEngine::StreamCommands` (empty command stream) or `GetState` snapshots.
-- **Outputs:** Real-time 2D visualization with pan/zoom, labels, grid, and entity selection.
+- **Outputs:** Real-time 2D visualization with pan/zoom, labels, grid, orbit lines, signal toggle, ship controls, and entity selection.
+- **Side effects:** Connects to the gRPC server over the network; renders GUI.
+
+## `MaritaLuna`
+
+A separate `egui`/`eframe` observer client that shows the infosphere from Luna's perspective. It uses only the restricted detection feed and never receives absolute coordinates.
+
+- **Inputs:** `MaritaEngine::StreamLunaView`.
+- **Outputs:** Polar plot of detections around Luna, coloured by wavelength bin, with radial distance and logarithmic-scale options.
 - **Side effects:** Connects to the gRPC server over the network; renders GUI.

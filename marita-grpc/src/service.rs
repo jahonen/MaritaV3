@@ -47,6 +47,9 @@ impl proto::marita_engine_server::MaritaEngine for MaritaEngineService {
     type StreamCommandsStream =
         Pin<Box<dyn Stream<Item = Result<proto::SimulationTick, Status>> + Send + Sync + 'static>>;
 
+    type StreamLunaViewStream =
+        Pin<Box<dyn Stream<Item = Result<proto::LunaDetections, Status>> + Send + Sync + 'static>>;
+
     async fn stream_commands(
         &self,
         request: Request<Streaming<proto::ShipCommand>>,
@@ -70,6 +73,22 @@ impl proto::marita_engine_server::MaritaEngine for MaritaEngineService {
             Err(_) => Err(Status::internal("tick broadcast closed")),
         });
 
+        Ok(Response::new(Box::pin(stream)))
+    }
+
+    async fn stream_luna_view(
+        &self,
+        _request: Request<proto::LunaViewRequest>,
+    ) -> MaritaServiceResult<Self::StreamLunaViewStream> {
+        let rx = self.tick_rx.resubscribe();
+        let stream = BroadcastStream::new(rx).map(|res| match res {
+            Ok(tick) => Ok(proto::LunaDetections {
+                tick: tick.tick,
+                sim_time: tick.sim_time,
+                detections: tick.luna_detections,
+            }),
+            Err(_) => Err(Status::internal("tick broadcast closed")),
+        });
         Ok(Response::new(Box::pin(stream)))
     }
 
@@ -158,6 +177,11 @@ fn convert_tick_output(output: &TickOutput) -> proto::SimulationTick {
                 detections,
             })
             .collect(),
+        luna_detections: output
+            .luna_detections
+            .iter()
+            .map(convert_detection)
+            .collect(),
     }
 }
 
@@ -219,6 +243,7 @@ fn convert_detection(d: &Detection) -> proto::Detection {
         source_id: d.source_id,
         wavelength_bin: d.wavelength_bin as u32,
         bearing: d.bearing,
+        distance: d.distance,
         strength: d.strength,
         snr: d.snr,
     }

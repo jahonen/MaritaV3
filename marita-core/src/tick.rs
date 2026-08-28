@@ -9,7 +9,7 @@ use crate::collision::resolve_collisions;
 use crate::gravity::compute_accelerations;
 use crate::heat::update_thermal;
 use crate::propulsion::{compute_thrust, EngineSignature};
-use crate::sensor::{compute_all_detections, Detection};
+use crate::sensor::{compute_all_detections, compute_luna_detections, Detection};
 use crate::signal::{clip_against_masses, cull_signals_past_sensors, emit_signals, propagate};
 use crate::state::{Body, Ship, ShipCommand, SignalArc, SimulationState, Spectrum, WavelengthBin};
 use crate::units::{SOLAR_SYSTEM_BOUNDARY, TICK_SIM_TIME};
@@ -20,6 +20,9 @@ use glam::DVec2;
 pub struct TickOutput {
     pub state: SimulationState,
     pub detections: Vec<Vec<Detection>>,
+    /// Detections from the fixed Luna station sensor, if Luna exists in the
+    /// system. Used by observer clients that must not receive absolute state.
+    pub luna_detections: Vec<Detection>,
 }
 
 /// Executes a single simulation tick.
@@ -193,13 +196,17 @@ impl TickExecutor {
         // 17. Run sensors against the ambient field plus active arcs.
         let detections = compute_all_detections(&state.bodies, &state.ships, &state.signals);
 
-        // 18. Advance time.
+        // 18. Compute Luna station detections for the restricted observer client.
+        let luna_detections = compute_luna_detections(&state.bodies, &state.ships, &state.signals);
+
+        // 19. Advance time.
         state.tick += 1;
         state.sim_time += dt;
 
         TickOutput {
             state: state.clone(),
             detections,
+            luna_detections,
         }
     }
 }

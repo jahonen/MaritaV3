@@ -1,5 +1,5 @@
 [workspace]
-members = ["marita-core", "marita-grpc", "marita-cli", "marita-admin"]
+members = ["marita-core", "marita-grpc", "marita-cli", "marita-admin", "marita-luna"]
 resolver = "2"
 
 [workspace.package]

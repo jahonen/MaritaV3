@@ -5,6 +5,7 @@ package marita;
 service MaritaEngine {
   rpc StreamCommands(stream ShipCommand) returns (stream SimulationTick);
   rpc GetState(GetStateRequest) returns (SimulationState);
+  rpc StreamLunaView(LunaViewRequest) returns (stream LunaDetections);
 }
 
 message ShipCommand {
@@ -76,8 +77,9 @@ message Detection {
   optional uint64 source_id = 1;
   uint32 wavelength_bin = 2;
   double bearing = 3;
-  double strength = 4;
-  double snr = 5;
+  double distance = 4;
+  double strength = 5;
+  double snr = 6;
 }
 
 message SimulationTick {
@@ -87,6 +89,15 @@ message SimulationTick {
   repeated Ship ships = 4;
   repeated SignalArc signals = 5;
   repeated ShipDetections ship_detections = 6;
+  repeated Detection luna_detections = 7;
+}
+
+message LunaViewRequest {}
+
+message LunaDetections {
+  uint64 tick = 1;
+  double sim_time = 2;
+  repeated Detection detections = 3;
 }
 
 message ShipDetections {
