@@ -244,7 +244,9 @@ fn drift_ships(ships: &mut [Ship], dt: f64) {
 mod tests {
     use super::*;
     use crate::ephemeris::{CircularOrbitLoader, EphemerisLoader};
-    use crate::state::{CollisionResponse, EngineMount, Ship, Spectrum, ThermalState};
+    use crate::state::{
+        CollisionResponse, EngineMount, Ship, Spectrum, ThermalState, WavelengthBin,
+    };
 
     fn make_ship(id: u64, pos: DVec2) -> Ship {
         Ship {
@@ -307,5 +309,37 @@ mod tests {
 
         assert!(state.ships[0].fuel_mass < before_fuel);
         assert!((state.ships[0].velocity - before_v).length() > 1e-3);
+    }
+
+    #[test]
+    fn thrust_emits_engine_signature_signal() {
+        let mut state = SimulationState::new();
+        state
+            .ships
+            .push(make_ship(1, DVec2::new(crate::units::AU, 0.0)));
+        state.ships[0].engine_mounts[0].max_thrust = 1000.0;
+        state.ships[0].engine_mounts[0].max_mass_flow = 0.34;
+        state.ships[0].engine_mounts[0].specific_impulse = 300.0;
+
+        let cmd = ShipCommand {
+            ship_id: 1,
+            throttle: 1.0,
+            gimbal: 0.0,
+            emitter_states: vec![],
+        };
+
+        let executor = TickExecutor::new();
+        let output = executor.step(&mut state, &[cmd]);
+
+        assert!(
+            !output.state.signals.is_empty(),
+            "expected at least one signal from engine plume"
+        );
+        let has_engine_thermal = output
+            .state
+            .signals
+            .iter()
+            .any(|arc| arc.spectrum.bins[WavelengthBin::EngineThermal as usize] > 0.0);
+        assert!(has_engine_thermal, "expected an engine-thermal signal arc");
     }
 }
