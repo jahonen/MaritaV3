@@ -116,6 +116,7 @@ struct ShipControlState {
 
 impl eframe::App for AdminApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.set_visuals(egui::Visuals::dark());
         self.try_recv_state();
 
         // Continuously send the current control state for the selected ship so
