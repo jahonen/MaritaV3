@@ -1,3 +1,4 @@
+pub mod ambient;
 pub mod collision;
 pub mod ephemeris;
 pub mod gravity;

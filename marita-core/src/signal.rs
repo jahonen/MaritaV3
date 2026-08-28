@@ -8,9 +8,8 @@
 use crate::spatial_tree::{Aabb, Quadtree};
 use crate::state::{
     normalize_angle, Body, CollisionResponse, Ship, SignalArc, SimulationState, Spectrum,
-    ThermalState, WavelengthBin,
 };
-use crate::units::{SOLAR_SYSTEM_BOUNDARY, SPEED_OF_LIGHT, STEFAN_BOLTZMANN};
+use crate::units::{SOLAR_SYSTEM_BOUNDARY, SPEED_OF_LIGHT};
 use glam::DVec2;
 
 /// Thermal energy absorbed by a body or ship from signals, per entity.
@@ -213,7 +212,11 @@ fn clip_arc(
             }
         }
 
-        if let Some((id, pos, radius, _, albedo)) = nearest {
+        if let Some((id, pos, radius, response, albedo)) = nearest {
+            // Only massive bodies reflect signals. Ships absorb but do not spawn
+            // reflected arcs, otherwise sunlight reflecting off every ship every
+            // tick creates an unbounded signal explosion.
+            let can_reflect = *response == CollisionResponse::Merge;
             // Absorbed portion = whatever is not reflected.
             let reflected_spectrum = occluded_spectrum.scaled_by_spectrum(albedo);
             // component-wise: absorbed = occluded - reflected
@@ -226,8 +229,9 @@ fn clip_arc(
             entry.0 += absorbed_spectrum.total();
             entry.1.add(&absorbed_spectrum);
 
-            // Spawn reflected arc if any reflected energy remains.
-            if reflected_spectrum.total() > 1e-30 && arc.generation < 3 {
+            // Spawn reflected arc if any reflected energy remains and the
+            // occluder is a massive body.
+            if can_reflect && reflected_spectrum.total() > 1e-30 && arc.generation < 3 {
                 let normal = (arc.origin - *pos).normalize();
                 let incident = -dir;
                 let reflected_dir = reflect_vector(incident, normal);
@@ -380,47 +384,14 @@ fn subtract_intervals(a: f64, b: f64, remove: &[(f64, f64)]) -> Vec<(f64, f64)> 
     result
 }
 
-/// Emit new signal arcs from thermal blackbody, intentional emitters, and the
-/// Sun. The returned arcs are at generation 0 with `outer_radius == 0` so they
-/// will expand on the next propagation step.
+/// Emit new signal arcs from active/intentional ship emitters only.
+///
+/// Sunlight and thermal blackbody radiation are now handled by the continuous
+/// `AmbientField`; discrete arcs are reserved for radar, laser, engine plume,
+/// and similar active emissions. The returned arcs are at generation 0 with
+/// `outer_radius == 0` so they expand on the next propagation step.
 pub fn emit_signals(state: &SimulationState, _dt: f64, next_id: &mut u64) -> Vec<SignalArc> {
     let mut emitted: Vec<SignalArc> = Vec::new();
-
-    // Sun emits omnidirectional optical arcs every tick.
-    // TODO: scale power to solar luminosity; for MVP use a representative value.
-    if let Some(sun) = state
-        .bodies
-        .iter()
-        .find(|b| b.name.eq_ignore_ascii_case("sun"))
-    {
-        let mut spectrum = Spectrum::zero();
-        spectrum.bins[WavelengthBin::Optical as usize] = 1.0e25;
-        spectrum.bins[WavelengthBin::Ultraviolet as usize] = 1.0e23;
-        let mut arc = SignalArc::new(
-            *next_id,
-            sun.position,
-            0.0,
-            2.0 * std::f64::consts::PI,
-            spectrum,
-        );
-        arc.source_id = Some(sun.id);
-        // Sunlight does not degrade in vacuum; removed at solar-system boundary.
-        arc.degradation_rates = Spectrum::zero();
-        *next_id += 1;
-        emitted.push(arc);
-    }
-
-    // Thermal emission from all bodies and ships.
-    for body in &state.bodies {
-        if let Some(arc) = thermal_arc(body.id, body.position, &body.thermal, next_id) {
-            emitted.push(arc);
-        }
-    }
-    for ship in &state.ships {
-        if let Some(arc) = thermal_arc(ship.id, ship.position, &ship.thermal, next_id) {
-            emitted.push(arc);
-        }
-    }
 
     // Intentional ship emitters. Emitter `active` flags are updated from
     // `ShipCommand` by the tick executor before this function is called.
@@ -454,40 +425,68 @@ fn rotate_vector(v: DVec2, angle: f64) -> DVec2 {
     DVec2::new(v.x * c - v.y * s, v.x * s + v.y * c)
 }
 
-fn thermal_arc(
-    id: u64,
-    pos: DVec2,
-    thermal: &ThermalState,
-    next_id: &mut u64,
-) -> Option<SignalArc> {
-    if thermal.temperature <= 0.0 {
-        return None;
+/// Discard active arcs that can no longer reach any sensor during the rest of
+/// their lifetime. Active arcs exist primarily to be detected; once they have
+/// swept past every known sensor position, keeping them is wasted work.
+pub fn cull_signals_past_sensors(
+    signals: Vec<SignalArc>,
+    ships: &[Ship],
+    boundary: f64,
+) -> Vec<SignalArc> {
+    if ships.is_empty() {
+        return Vec::new();
     }
-    let power =
-        thermal.emissivity * STEFAN_BOLTZMANN * thermal.surface_area * thermal.temperature.powi(4);
-    if power <= 0.0 {
-        return None;
+
+    signals
+        .into_iter()
+        .filter(|arc| can_reach_sensor(arc, ships, boundary))
+        .collect()
+}
+
+fn can_reach_sensor(arc: &SignalArc, ships: &[Ship], boundary: f64) -> bool {
+    // Maximum distance the arc will reach before it degrades or hits the
+    // simulation boundary. Use the slowest-degrading bin to be conservative.
+    let min_rate = arc
+        .degradation_rates
+        .bins
+        .iter()
+        .cloned()
+        .filter(|r| *r > 0.0)
+        .fold(f64::INFINITY, f64::min);
+    let max_degradation_range = if min_rate.is_finite() && min_rate > 0.0 {
+        let lifetime = -((1e-30 / arc.spectrum.total().max(1e-300)).ln() / min_rate);
+        lifetime * SPEED_OF_LIGHT
+    } else {
+        boundary
+    };
+    let max_range = max_degradation_range.min(boundary);
+
+    let half_width = arc.angular_width / 2.0;
+    let arc_dir = crate::state::heading_vector(arc.direction);
+
+    for ship in ships {
+        let delta = ship.position - arc.origin;
+        let dist = delta.length();
+        if dist > max_range {
+            continue;
+        }
+
+        // Check angular containment: the ship must lie within the arc's sector.
+        let cos_half = half_width.cos();
+        let cos_angle = (delta.dot(arc_dir) / dist.max(1e-12)).clamp(-1.0, 1.0);
+        if cos_angle >= cos_half {
+            // The ship is somewhere in front of the arc and within reach.
+            return true;
+        }
     }
-    let mut spectrum = Spectrum::zero();
-    // Simplified: most energy in IR, some in optical for very hot bodies.
-    spectrum.bins[WavelengthBin::Infrared as usize] = power;
-    if thermal.temperature > 3000.0 {
-        spectrum.bins[WavelengthBin::Optical as usize] = power * 0.01;
-    }
-    let mut arc = SignalArc::new(*next_id, pos, 0.0, 2.0 * std::f64::consts::PI, spectrum);
-    arc.source_id = Some(id);
-    // Thermal emission is continuous; treat each emitted pulse as fresh and
-    // fade it so old pulses do not accumulate indefinitely.
-    arc.degradation_rates.bins[WavelengthBin::Infrared as usize] = 1.0;
-    arc.degradation_rates.bins[WavelengthBin::Optical as usize] = 1.0;
-    *next_id += 1;
-    Some(arc)
+
+    false
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{Body, CollisionResponse, ThermalState};
+    use crate::state::{Body, CollisionResponse, Emitter, ThermalState, WavelengthBin};
 
     fn test_body(id: u64, x: f64, y: f64, radius: f64) -> Body {
         Body {
@@ -544,23 +543,36 @@ mod tests {
     }
 
     #[test]
-    fn sun_emits_optical_signal() {
+    fn active_emitter_emits_arc() {
         let mut state = SimulationState::new();
-        state.bodies.push(Body {
+        state.ships.push(Ship {
             id: 1,
-            name: "Sun".into(),
-            mass: crate::units::SOLAR_MASS,
+            name: "probe".into(),
+            dry_mass: 1000.0,
+            fuel_mass: 0.0,
             position: DVec2::ZERO,
             velocity: DVec2::ZERO,
-            radius: crate::units::SOLAR_RADIUS,
+            orientation: 0.0,
+            angular_velocity: 0.0,
+            moment_of_inertia: 1000.0,
+            engine_mounts: vec![],
+            sensor_arrays: vec![],
+            emitters: vec![crate::state::Emitter {
+                local_position: DVec2::ZERO,
+                direction: 0.0,
+                wavelength_bin: WavelengthBin::Radar,
+                angular_width: 0.1,
+                max_info_per_tick: 1.0e9,
+                active: true,
+            }],
+            thermal: ThermalState::new(0.0, 1.0, 1.0),
             collision_response: CollisionResponse::Ghost,
-            thermal: ThermalState::new(5772.0, 1.0, 1.0),
             albedo: Spectrum::zero(),
         });
         let mut next_id = 2u64;
         let emitted = emit_signals(&mut state, 1.0, &mut next_id);
         assert!(!emitted.is_empty());
-        let sun_arc = emitted.iter().find(|a| a.source_id == Some(1)).unwrap();
-        assert!(sun_arc.spectrum.bins[WavelengthBin::Optical as usize] > 0.0);
+        let arc = emitted.iter().find(|a| a.source_id == Some(1)).unwrap();
+        assert!(arc.spectrum.bins[WavelengthBin::Radar as usize] > 0.0);
     }
 }

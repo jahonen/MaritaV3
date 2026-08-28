@@ -95,6 +95,13 @@ This document lists every modular unit of functionality in the MaritaV3 space si
 - **Side effects:** None.
 - **Lifecycle:** alpha
 
+### `AmbientField`
+- **Purpose:** Continuous radiation field for sunlight and thermal emission. Replaces expanding-arc emitters for the Sun and warm bodies, eliminating the ambient signal explosion while preserving heating and sensor background.
+- **Inputs:** Current `Body` and `Ship` slices.
+- **Outputs:** Irradiance spectra at points, absorbed energy for entities, and ambient source lists for sensors.
+- **Side effects:** None.
+- **Lifecycle:** alpha
+
 ## Admin Viewer Components
 
 ### `AdminApp`

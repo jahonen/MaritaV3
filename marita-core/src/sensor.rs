@@ -5,8 +5,9 @@
 //! computes what a ship can detect from the current signal arcs, taking
 //! jamming (other in-band signals) into account.
 
+use crate::ambient::AmbientField;
 use crate::spatial_tree::{Aabb, Quadtree};
-use crate::state::{normalize_angle, Ship, SignalArc, WavelengthBin, SPECTRUM_BINS};
+use crate::state::{normalize_angle, Body, Ship, SignalArc, WavelengthBin, SPECTRUM_BINS};
 use glam::DVec2;
 
 /// A detection reported by a sensor array.
@@ -23,10 +24,16 @@ pub struct Detection {
 }
 
 /// Compute all detections for all ships.
-pub fn compute_all_detections(ships: &[Ship], signals: &[SignalArc]) -> Vec<Vec<Detection>> {
-    if signals.is_empty() || ships.is_empty() {
-        return ships.iter().map(|_| Vec::new()).collect();
+pub fn compute_all_detections(
+    bodies: &[Body],
+    ships: &[Ship],
+    signals: &[SignalArc],
+) -> Vec<Vec<Detection>> {
+    if ships.is_empty() {
+        return Vec::new();
     }
+
+    let field = AmbientField::new(bodies, ships);
 
     let signal_items: Vec<_> = signals
         .iter()
@@ -37,7 +44,7 @@ pub fn compute_all_detections(ships: &[Ship], signals: &[SignalArc]) -> Vec<Vec<
 
     ships
         .iter()
-        .map(|ship| compute_ship_detections(ship, signals, &signal_tree))
+        .map(|ship| compute_ship_detections(ship, signals, &signal_tree, &field))
         .collect()
 }
 
@@ -45,17 +52,56 @@ fn compute_ship_detections(
     ship: &Ship,
     signals: &[SignalArc],
     signal_tree: &Quadtree,
+    field: &AmbientField,
 ) -> Vec<Detection> {
     let mut detections = Vec::new();
 
     for sensor in &ship.sensor_arrays {
         let sensor_pos = ship.position + rotate_vector(sensor.local_position, ship.orientation);
         let sensor_bearing = normalize_angle(ship.orientation + sensor.bearing);
+        let half_fov = sensor.field_of_view / 2.0;
 
         // First pass: compute received power per bin at the ship location from
         // every arc, binned by wavelength.
         let mut received: [f64; SPECTRUM_BINS] = [0.0; SPECTRUM_BINS];
         let mut per_arc: Vec<(usize, [f64; SPECTRUM_BINS], f64)> = Vec::new();
+
+        // Ambient field sources (Sunlight + thermal) are continuous, not arcs.
+        // Add any that are within the sensor field of view as detections and
+        // accumulate their power into the jamming floor.
+        for source in field.sensor_sources(sensor_pos) {
+            let raw_diff = (source.direction - sensor_bearing).abs();
+            let bearing_diff = raw_diff.min(2.0 * std::f64::consts::PI - raw_diff);
+            if bearing_diff > half_fov {
+                continue;
+            }
+            for i in 0..SPECTRUM_BINS {
+                if !sensor.bands[i] {
+                    continue;
+                }
+                let power =
+                    source.spectrum.bins[i] * sensor.aperture_area * sensor.integration_time;
+                if power <= 0.0 {
+                    continue;
+                }
+                let noise = sensor.noise_floor + received[i];
+                if noise > 0.0 {
+                    let snr = power / noise;
+                    if snr >= sensor.min_snr {
+                        detections.push(Detection {
+                            source_id: source.id,
+                            wavelength_bin: unsafe {
+                                std::mem::transmute::<usize, WavelengthBin>(i)
+                            },
+                            bearing: source.direction,
+                            strength: power,
+                            snr,
+                        });
+                    }
+                }
+                received[i] += power;
+            }
+        }
 
         let sensor_aabb = Aabb::from_circle(sensor_pos, 1.0);
         let candidate_indices = signal_tree.query_region(sensor_aabb);
@@ -67,7 +113,6 @@ fn compute_ship_detections(
                 continue;
             }
             let bearing = normalize_angle(delta.y.atan2(delta.x));
-            let half_fov = sensor.field_of_view / 2.0;
             // Compute smallest angular distance, wrapping around the circle.
             let raw_diff = (bearing - sensor_bearing).abs();
             let bearing_diff = raw_diff.min(2.0 * std::f64::consts::PI - raw_diff);
@@ -182,7 +227,8 @@ mod tests {
 
         let signal_items = vec![(0usize, Aabb::from_circle(arc.origin, arc.outer_radius))];
         let signal_tree = Quadtree::build(&signal_items, 4, 8);
-        let detections = compute_ship_detections(&ship, &[arc], &signal_tree);
+        let field = AmbientField::new(&[], &[]);
+        let detections = compute_ship_detections(&ship, &[arc], &signal_tree, &field);
         assert!(!detections.is_empty());
         assert!(detections
             .iter()
@@ -206,7 +252,8 @@ mod tests {
 
         let signal_items = vec![(0usize, Aabb::from_circle(arc.origin, arc.outer_radius))];
         let signal_tree = Quadtree::build(&signal_items, 4, 8);
-        let detections = compute_ship_detections(&ship, &[arc], &signal_tree);
+        let field = AmbientField::new(&[], &[]);
+        let detections = compute_ship_detections(&ship, &[arc], &signal_tree, &field);
         // Sensor points at +X, source is at +Y, outside FOV.
         assert!(detections.is_empty());
     }

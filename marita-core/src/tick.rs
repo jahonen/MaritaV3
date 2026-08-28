@@ -4,14 +4,15 @@
 //! ship commands, integrates gravity and rigid-body dynamics, propagates and
 //! clips signals, updates heat, emits new signals, and runs sensors.
 
+use crate::ambient::AmbientField;
 use crate::collision::resolve_collisions;
 use crate::gravity::compute_accelerations;
 use crate::heat::update_thermal;
 use crate::propulsion::{compute_thrust, EngineSignature};
 use crate::sensor::{compute_all_detections, Detection};
-use crate::signal::{clip_against_masses, emit_signals, propagate};
+use crate::signal::{clip_against_masses, cull_signals_past_sensors, emit_signals, propagate};
 use crate::state::{Body, Ship, ShipCommand, SignalArc, SimulationState, Spectrum, WavelengthBin};
-use crate::units::TICK_SIM_TIME;
+use crate::units::{SOLAR_SYSTEM_BOUNDARY, TICK_SIM_TIME};
 use glam::DVec2;
 
 /// Output of one simulation tick.
@@ -113,10 +114,14 @@ impl TickExecutor {
         state.bodies = collision_result.bodies;
         state.ships = collision_result.ships;
 
-        // 10. Propagate existing signals.
+        // 10. Build the continuous ambient radiation field from the Sun and warm
+        // bodies. This is used for heating and sensor background.
+        let ambient = AmbientField::new(&state.bodies, &state.ships);
+
+        // 11. Propagate existing active signals.
         propagate(&mut state.signals, dt);
 
-        // 11. Clip signals against masses.
+        // 12. Clip active signals against masses.
         let clip_result = clip_against_masses(
             std::mem::take(&mut state.signals),
             &state.bodies,
@@ -125,7 +130,8 @@ impl TickExecutor {
         state.signals = clip_result.remaining;
         state.signals.extend(clip_result.reflected);
 
-        // 12. Update thermal states from absorbed energy and emit thermal signals.
+        // 13. Update thermal states from ambient irradiance plus any energy
+        // absorbed from active signal arcs.
         let mut absorbed_by_entity: std::collections::HashMap<u64, f64> =
             std::collections::HashMap::new();
         for absorbed in &clip_result.absorbed {
@@ -133,15 +139,27 @@ impl TickExecutor {
         }
 
         for body in &mut state.bodies {
-            let energy = absorbed_by_entity.get(&body.id).copied().unwrap_or(0.0);
-            update_thermal(&mut body.thermal, energy, dt);
+            let ambient_energy =
+                ambient.absorbed_energy(body.position, body.radius, body.thermal.emissivity, dt);
+            let arc_energy = absorbed_by_entity.get(&body.id).copied().unwrap_or(0.0);
+            update_thermal(&mut body.thermal, ambient_energy + arc_energy, dt);
         }
         for ship in &mut state.ships {
-            let energy = absorbed_by_entity.get(&ship.id).copied().unwrap_or(0.0);
-            update_thermal(&mut ship.thermal, energy, dt);
+            let ambient_energy =
+                ambient.absorbed_energy(ship.position, ship.radius(), ship.thermal.emissivity, dt);
+            let arc_energy = absorbed_by_entity.get(&ship.id).copied().unwrap_or(0.0);
+            update_thermal(&mut ship.thermal, ambient_energy + arc_energy, dt);
         }
 
-        // 13. Emit new signals: thermal, Sun, intentional emitters, engine signatures.
+        // 14. Discard active arcs that have already swept past every known
+        // sensor and cannot be detected in the future.
+        state.signals = cull_signals_past_sensors(
+            std::mem::take(&mut state.signals),
+            &state.ships,
+            SOLAR_SYSTEM_BOUNDARY,
+        );
+
+        // 15. Emit new active signals: intentional emitters and engine signatures.
         let mut next_id = state.next_id;
         let mut emitted = emit_signals(state, dt, &mut next_id);
         // Add engine signatures as arcs.
@@ -164,7 +182,7 @@ impl TickExecutor {
         state.next_id = next_id;
         state.signals.extend(emitted);
 
-        // 14. Cap total signals to prevent unbounded memory growth.
+        // 16. Cap total signals to prevent unbounded memory growth.
         if state.signals.len() > self.max_signals {
             // Keep the newest (highest id) arcs, which are the most recently emitted.
             state.signals.sort_by_key(|a| a.id);
@@ -172,10 +190,10 @@ impl TickExecutor {
             state.signals.drain(0..drain_count);
         }
 
-        // 15. Run sensors.
-        let detections = compute_all_detections(&state.ships, &state.signals);
+        // 17. Run sensors against the ambient field plus active arcs.
+        let detections = compute_all_detections(&state.bodies, &state.ships, &state.signals);
 
-        // 15. Advance time.
+        // 18. Advance time.
         state.tick += 1;
         state.sim_time += dt;
 
