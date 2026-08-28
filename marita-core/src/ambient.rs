@@ -113,8 +113,10 @@ impl AmbientField {
             let to_caster = caster.position - point;
             let caster_dist = to_caster.length();
             if caster_dist <= caster.radius {
-                // Inside a shadow-casting body: sunlight is blocked.
-                return false;
+                // The point is inside or on the surface of the body. Don't
+                // let a body shadow its own interior; this keeps surface
+                // heating and virtual station sensors working.
+                continue;
             }
             if caster_dist >= sun_dist {
                 // Body is not between the point and the Sun.

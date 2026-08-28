@@ -36,7 +36,11 @@ pub fn compute_luna_detections(
     ships: &[Ship],
     signals: &[SignalArc],
 ) -> Vec<Detection> {
-    let Some(luna) = bodies.iter().find(|b| b.name.eq_ignore_ascii_case("luna")) else {
+    // The ephemeris generator names Earth's natural satellite "Moon".
+    let Some(luna) = bodies
+        .iter()
+        .find(|b| b.name.eq_ignore_ascii_case("moon") || b.name.eq_ignore_ascii_case("luna"))
+    else {
         return Vec::new();
     };
 
@@ -248,7 +252,7 @@ fn rotate_vector(v: DVec2, angle: f64) -> DVec2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{CollisionResponse, SensorArray, Ship, Spectrum, ThermalState};
+    use crate::state::{Body, CollisionResponse, SensorArray, Ship, Spectrum, ThermalState};
 
     fn test_ship_with_sensor() -> Ship {
         Ship {
@@ -339,5 +343,57 @@ mod tests {
         );
         // Sensor points at +X, source is at +Y, outside FOV.
         assert!(detections.is_empty());
+    }
+
+    #[test]
+    fn luna_sensor_detects_sun_and_earth() {
+        let au = 1.496e11;
+        let sun = Body {
+            id: 1,
+            name: "Sun".into(),
+            mass: 1.989e30,
+            position: DVec2::ZERO,
+            velocity: DVec2::ZERO,
+            radius: 6.957e8,
+            collision_response: CollisionResponse::Ghost,
+            thermal: ThermalState::new(5778.0, 1.0, 1.0),
+            albedo: Spectrum::zero(),
+        };
+        let earth = Body {
+            id: 2,
+            name: "Earth".into(),
+            mass: 5.972e24,
+            position: DVec2::new(au, 0.0),
+            velocity: DVec2::ZERO,
+            radius: 6.371e6,
+            collision_response: CollisionResponse::Merge,
+            thermal: ThermalState::new(
+                288.0,
+                1.0e20,
+                4.0 * std::f64::consts::PI * 6.371e6 * 6.371e6,
+            ),
+            albedo: Spectrum::zero(),
+        };
+        // Moon is far enough from the Earth-Sun line that the Sun is visible.
+        let moon = Body {
+            id: 3,
+            name: "Moon".into(),
+            mass: 7.3477e22,
+            position: DVec2::new(0.0, au),
+            velocity: DVec2::ZERO,
+            radius: 1.737e6,
+            collision_response: CollisionResponse::Merge,
+            thermal: ThermalState::new(
+                250.0,
+                1.0e18,
+                4.0 * std::f64::consts::PI * 1.737e6 * 1.737e6,
+            ),
+            albedo: Spectrum::zero(),
+        };
+
+        let detections = compute_luna_detections(&[sun, earth, moon], &[], &[]);
+        assert!(!detections.is_empty(), "Luna should detect ambient sources");
+        let sun_detected = detections.iter().any(|d| d.source_id == Some(1));
+        assert!(sun_detected, "Luna should detect the Sun");
     }
 }
