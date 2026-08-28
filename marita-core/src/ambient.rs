@@ -25,6 +25,9 @@ struct RadiatingBody {
 pub struct AmbientField {
     solar_source: Option<RadiatingBody>,
     thermal_sources: Vec<RadiatingBody>,
+    /// Bodies that can fully occlude the Sun. Includes all massive bodies
+    /// except the Sun itself.
+    shadow_casters: Vec<RadiatingBody>,
 }
 
 impl AmbientField {
@@ -42,6 +45,7 @@ impl AmbientField {
             });
 
         let mut thermal_sources = Vec::new();
+        let mut shadow_casters = Vec::new();
         for body in bodies {
             // Skip the Sun from the thermal list; its output is represented by
             // the dedicated solar field. Including it here would double-count its
@@ -58,6 +62,14 @@ impl AmbientField {
                     emissivity: body.thermal.emissivity,
                 });
             }
+            // Any massive body can cast a shadow on a more distant one.
+            shadow_casters.push(RadiatingBody {
+                id: body.id,
+                position: body.position,
+                radius: body.radius,
+                temperature: body.thermal.temperature,
+                emissivity: body.thermal.emissivity,
+            });
         }
         for ship in ships {
             if ship.thermal.temperature > 0.0 {
@@ -74,7 +86,59 @@ impl AmbientField {
         Self {
             solar_source,
             thermal_sources,
+            shadow_casters,
         }
+    }
+
+    /// Check whether the Sun is fully visible from `point`.
+    ///
+    /// A body fully shadows the Sun when its apparent angular radius from `point`
+    /// is at least the Sun's apparent angular radius plus the angular separation
+    /// between the body and the Sun. This is a simple full-shadow test; partial
+    /// penumbras are ignored.
+    fn is_sun_visible(&self, point: DVec2) -> bool {
+        let Some(sun) = self.solar_source else {
+            return false;
+        };
+        let to_sun = sun.position - point;
+        let sun_dist = to_sun.length();
+        if sun_dist <= 0.0 {
+            return false;
+        }
+        if sun_dist <= sun.radius {
+            return true;
+        }
+
+        for caster in &self.shadow_casters {
+            let to_caster = caster.position - point;
+            let caster_dist = to_caster.length();
+            if caster_dist <= caster.radius {
+                // Inside a shadow-casting body: sunlight is blocked.
+                return false;
+            }
+            if caster_dist >= sun_dist {
+                // Body is not between the point and the Sun.
+                continue;
+            }
+
+            let dot = to_caster.dot(to_sun);
+            let cos_sep = (dot / (caster_dist * sun_dist)).clamp(-1.0, 1.0);
+
+            let sin_caster = (caster.radius / caster_dist).min(1.0);
+            let sin_sun = (sun.radius / sun_dist).min(1.0);
+            let cos_caster = (1.0 - sin_caster * sin_caster).max(0.0).sqrt();
+            let cos_sun = (1.0 - sin_sun * sin_sun).max(0.0).sqrt();
+            // cos(alpha_caster - alpha_sun)
+            let cos_caster_minus_sun = cos_caster * cos_sun + sin_caster * sin_sun;
+
+            // Shadow when alpha_caster >= alpha_sun + sep, i.e.
+            // cos(alpha_caster - alpha_sun) <= cos(sep).
+            if cos_caster_minus_sun <= cos_sep {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Solar irradiance (W/m^2) at `point`.
@@ -85,6 +149,9 @@ impl AmbientField {
         let delta = sun.position - point;
         let dist_sq = delta.length_squared();
         if dist_sq <= 0.0 {
+            return Spectrum::zero();
+        }
+        if !self.is_sun_visible(point) {
             return Spectrum::zero();
         }
         // Total emitted power = ε σ 4π r^2 T^4.  The 4π cancels with the
@@ -148,9 +215,12 @@ impl AmbientField {
     /// The returned iterator yields the source direction, distance, and per-bin
     /// irradiance. The caller is responsible for field-of-view filtering.
     pub fn sensor_sources(&self, point: DVec2) -> impl Iterator<Item = AmbientSource> + '_ {
-        let solar = self.solar_source.map(move |sun| {
+        let solar = self.solar_source.and_then(move |sun| {
+            if !self.is_sun_visible(point) {
+                return None;
+            }
             let delta = sun.position - point;
-            AmbientSource {
+            Some(AmbientSource {
                 id: Some(sun.id),
                 direction: if delta.length_squared() > 0.0 {
                     delta.y.atan2(delta.x)
@@ -159,7 +229,7 @@ impl AmbientField {
                 },
                 distance: delta.length(),
                 spectrum: self.solar_irradiance(point),
-            }
+            })
         });
 
         let thermal = self.thermal_sources.iter().map(move |src| {
@@ -257,16 +327,36 @@ mod tests {
     }
 
     #[test]
-    fn solar_constant_at_earth() {
+    fn solar_constant_at_earth_orbit() {
         let mut sun = test_body("Sun", 5778.0, 6.9634e8);
         let mut earth = test_body("Earth", 288.0, 6.371e6);
         sun.position = DVec2::ZERO;
         let earth_pos = DVec2::new(1.496e11, 0.0);
         earth.position = earth_pos;
+        let earth_radius = earth.radius;
         let field = AmbientField::new(&[sun, earth], &[]);
-        let irrad = field.solar_irradiance(earth_pos);
+        // Evaluate just above Earth's Sun-facing surface so the point is outside
+        // the body and the Sun is visible.
+        let surface = DVec2::new(earth_pos.x - earth_radius - 1e3, 0.0);
+        let irrad = field.solar_irradiance(surface);
         // Within an order of magnitude of ~1361 W/m^2.
         assert!(irrad.total() > 100.0 && irrad.total() < 1e6);
+    }
+
+    #[test]
+    fn earth_shadows_sunlight_behind_it() {
+        let mut sun = test_body("Sun", 5778.0, 6.9634e8);
+        let mut earth = test_body("Earth", 288.0, 6.371e6);
+        sun.position = DVec2::ZERO;
+        earth.position = DVec2::new(1.496e11, 0.0);
+        let earth_position = earth.position;
+        let earth_radius = earth.radius;
+        let field = AmbientField::new(&[sun, earth], &[]);
+
+        // Point on the far side of Earth from the Sun.
+        let shadow_point = DVec2::new(earth_position.x + earth_radius + 1e6, 0.0);
+        let irrad = field.solar_irradiance(shadow_point);
+        assert!(irrad.total() < 1.0);
     }
 
     #[test]

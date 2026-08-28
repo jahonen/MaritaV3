@@ -486,7 +486,7 @@ fn can_reach_sensor(arc: &SignalArc, ships: &[Ship], boundary: f64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{Body, CollisionResponse, Emitter, ThermalState, WavelengthBin};
+    use crate::state::{Body, CollisionResponse, ThermalState, WavelengthBin};
 
     fn test_body(id: u64, x: f64, y: f64, radius: f64) -> Body {
         Body {
