@@ -16,3 +16,7 @@ Cargo.lock
 # Simulation checkpoints (large JSON dumps)
 *.checkpoint.json
 /checkpoints/
+
+# macOS
+.DS_Store
+**/.DS_Store
