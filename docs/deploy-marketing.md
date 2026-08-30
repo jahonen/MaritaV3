@@ -119,3 +119,57 @@ Submit when page *content* meaningfully changes — new copy, new sections, a
 price change. Do not submit on every deploy; repeatedly pushing an unchanged URL
 is what gets a host rate limited. There is no benefit to submitting more than
 once for the same change.
+
+## Contact form
+
+The footer form posts to `/api/contact`, a Cloudflare Pages Function at
+`functions/api/contact.js` in the repository root. Pages looks for `functions/`
+at the *project* root, not inside the build output directory, which is why it
+does not live under `marketing/`.
+
+The SendGrid key never reaches the browser: the page posts JSON to the Function,
+and the Function calls SendGrid.
+
+### Required bindings
+
+Set these in **Workers & Pages → your project → Settings → Environment
+variables**. Variables are per-environment, so add them to **Production**, and
+again to **Preview** if you want the form working on preview deployments.
+
+| Name | Type | Required | Purpose |
+| --- | --- | --- | --- |
+| `SENDGRID_API_KEY` | Secret | yes | SendGrid API key with Mail Send permission |
+| `ADMIN_EMAIL` | Plaintext | yes | Where messages are delivered |
+| `CONTACT_FROM_EMAIL` | Plaintext | no | Verified sender; falls back to `ADMIN_EMAIL` |
+
+**The `from` address must be a verified sender in SendGrid.** This is the single
+most common reason a working-looking form silently fails: SendGrid rejects mail
+from unverified senders with a 403. Verify either the single address or the
+whole domain under SendGrid → Settings → Sender Authentication. The visitor's
+address is never used as `from` — it is set as `reply-to`, so replying from your
+mail client reaches them.
+
+### Behaviour
+
+- Only ever sends to `ADMIN_EMAIL`. It cannot be used as an open relay.
+- Rejects cross-origin posts.
+- Honeypot field plus a minimum time-on-page check. Both return `200` so a bot
+  cannot tell it was filtered.
+- Control characters are stripped from header-bound values; lengths are capped.
+- Real failure reasons go to the Function log, never to the visitor. Read them
+  under **Deployments → the deployment → Functions → real-time logs**.
+
+### Testing locally
+
+`python3 -m http.server` serves the static page but not the Function, so
+submissions fail with a network error. To exercise the Function, use Wrangler:
+
+```bash
+npx wrangler pages dev marketing/prebeta --binding ADMIN_EMAIL=you@example.com --binding SENDGRID_API_KEY=sg-key
+```
+
+### Spam hardening
+
+The honeypot and timing check stop naive bots. If the form starts attracting
+real spam, add Cloudflare Turnstile: it is free, on the same platform, and needs
+a site key in the form plus one verification call in the Function.

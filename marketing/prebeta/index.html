@@ -305,6 +305,34 @@ ul.list.no li::before{background:var(--ink-faint)}
 .leg.now .leg-n{color:var(--radio)}
 .leg.later .leg-t,.leg.later .leg-d{color:var(--ink-faint)}
 
+/* ---- contact ---- */
+.contact{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:clamp(28px,4vw,56px);align-items:start}
+.contact-copy{display:flex;flex-direction:column;gap:14px}
+form.contact-form{display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{
+  font-family:"IBM Plex Mono",monospace;font-size:.64rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-faint);
+}
+.field input,.field textarea{
+  width:100%;background:var(--sunk);color:var(--ink);
+  border:1px solid var(--hairline);border-radius:2px;
+  padding:11px 13px;font-family:inherit;font-size:.95rem;font-weight:300;line-height:1.5;
+  transition:border-color .15s ease;
+}
+.field textarea{resize:vertical;min-height:118px}
+.field input:hover,.field textarea:hover{border-color:var(--ink-faint)}
+.field input:focus,.field textarea:focus{outline:none;border-color:var(--radio);box-shadow:0 0 0 3px color-mix(in srgb, var(--radio) 18%, transparent)}
+.field input::placeholder,.field textarea::placeholder{color:var(--ink-faint);opacity:.65}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.form-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:2px}
+button.btn{font-family:"IBM Plex Mono",monospace}
+button.btn[disabled]{opacity:.55;cursor:default;transform:none}
+.form-status{font-size:.86rem;line-height:1.5;min-height:1.3em}
+.form-status.err{color:var(--radio-bright)}
+.form-status.ok{color:var(--xray)}
+@media (max-width:820px){ .contact{grid-template-columns:1fr} }
+
 /* ---- faq ---- */
 .faq{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:clamp(26px,3.4vw,48px)}
 .qa{display:flex;flex-direction:column;gap:9px}
@@ -626,6 +654,45 @@ footer{border-top:1px solid var(--hairline);padding:34px 0 56px}
     <p class="dedication">Marita is named for a grandmother whose belief in the imagination of kids made everything feel possible. This is what that turned into.</p>
   </div>
 </section>
+<section class="pad" id="contact" aria-labelledby="contact-h">
+  <div class="wrap">
+    <div class="contact">
+      <div class="contact-copy">
+        <p class="eyebrow">Get in touch</p>
+        <h2 id="contact-h">Questions about the API, the physics, or the cohort?</h2>
+        <p class="body">Ask directly. If you are building a pilot and want to know whether something is
+        modelled, that is exactly the sort of question worth sending.</p>
+      </div>
+
+      <form class="contact-form" id="contact-form" novalidate>
+        <div class="field">
+          <label for="cf-name">Name <span style="text-transform:none;letter-spacing:0">(optional)</span></label>
+          <input type="text" id="cf-name" name="name" autocomplete="name" maxlength="120" placeholder="Your name">
+        </div>
+        <div class="field">
+          <label for="cf-email">Email</label>
+          <input type="email" id="cf-email" name="email" autocomplete="email" maxlength="254" required placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="cf-message">Message</label>
+          <textarea id="cf-message" name="message" maxlength="4000" required placeholder="What would you like to know?"></textarea>
+        </div>
+
+        <!-- Honeypot. Hidden from people; bots fill it in. -->
+        <div class="hp" aria-hidden="true">
+          <label for="cf-company">Company</label>
+          <input type="text" id="cf-company" name="company" tabindex="-1" autocomplete="off">
+        </div>
+
+        <div class="form-row">
+          <button type="submit" class="btn" id="cf-submit">Send message</button>
+          <p class="form-status" id="cf-status" role="status" aria-live="polite"></p>
+        </div>
+        <noscript><p class="cta-note">This form needs JavaScript. Sorry — it keeps the mail credentials off the page.</p></noscript>
+      </form>
+    </div>
+  </div>
+</section>
 </main>
 
 <footer>
@@ -928,6 +995,77 @@ var CHECKOUT_URL = ""; // e.g. "https://buy.stripe.com/xxxxxxxxxxxx"
     }
   ]
 }
+</script>
+<script>
+(function () {
+  var form = document.getElementById("contact-form");
+  if (!form) return;
+  var statusEl = document.getElementById("cf-status");
+  var button = document.getElementById("cf-submit");
+  var opened = Date.now();
+
+  function say(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = "form-status" + (kind ? " " + kind : "");
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    var payload = {
+      name: form.name.value,
+      email: form.email.value.trim(),
+      message: form.message.value,
+      company: form.company.value,
+      elapsed: Date.now() - opened
+    };
+
+    if (!payload.email) {
+      say("Please add an email address so we can reply.", "err");
+      form.email.focus();
+      return;
+    }
+    if (payload.email.indexOf("@") < 1 || payload.email.indexOf(".", payload.email.indexOf("@")) < 0) {
+      say("That email address is missing an @ or a domain.", "err");
+      form.email.focus();
+      return;
+    }
+    if (!payload.message.trim()) {
+      say("Please include a message.", "err");
+      form.message.focus();
+      return;
+    }
+
+    button.disabled = true;
+    say("Sending...");
+
+    fetch("/api/contact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) {
+          return { ok: r.ok, data: d };
+        });
+      })
+      .then(function (res) {
+        if (res.ok && res.data.ok) {
+          form.reset();
+          opened = Date.now();
+          say("Sent. We will reply to that address.", "ok");
+        } else {
+          say(res.data.error || "The message could not be sent. Please try again.", "err");
+        }
+      })
+      .catch(function () {
+        say("Network problem. Please try again.", "err");
+      })
+      .then(function () {
+        button.disabled = false;
+      });
+  });
+})();
 </script>
 </body>
 </html>
