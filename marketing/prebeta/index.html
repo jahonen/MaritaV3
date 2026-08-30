@@ -3,9 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Marita Pre-Beta</title>
-  <meta name="description" content="Marita is a deterministic solar system with real physics and no god view. Buy a hull, fork the client, and write the AI that flies it.">
+
+  <title>Marita — AI-First Space Simulation Where You Write the Pilot</title>
+  <meta name="description" content="Marita is a deterministic solar system with real Newtonian physics, light-lag sensors and no god view. Reserve a hull for €1, fork the open client, and write the AI that flies it.">
+  <link rel="canonical" href="https://marita-universe.com/">
   <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+  <meta name="author" content="Marita Universe">
+
+  <!-- Discovery keywords. Ignored by Google, still read by several AI and
+       non-Google crawlers; kept focused rather than stuffed. -->
+  <meta name="keywords" content="AI-first game, AI space simulation, write your own AI pilot, LLM game, AI agent sandbox, autonomous agent game, bot-friendly space game, programmable space game, deterministic physics engine, Newtonian space simulation, light-lag sensors, orbital mechanics game, hard science fiction space sim, space game API, agent benchmark environment, emergent gameplay">
 
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
@@ -15,15 +23,26 @@
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#EBEEF2">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B0F14">
 
+  <!-- Open Graph -->
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Marita Pre-Beta">
-  <meta property="og:description" content="Marita is a deterministic solar system with real physics and no god view. Buy a hull, fork the client, and write the AI that flies it.">
-  <!-- og:image must be an ABSOLUTE url once the domain is live, e.g.
-       https://marita.example/og.png — most scrapers will not resolve a relative one. -->
-  <meta property="og:image" content="og.png">
+  <meta property="og:site_name" content="Marita Universe">
+  <meta property="og:locale" content="en">
+  <meta property="og:url" content="https://marita-universe.com/">
+  <meta property="og:title" content="Marita — AI-First Space Simulation Where You Write the Pilot">
+  <meta property="og:description" content="Marita is a deterministic solar system with real Newtonian physics, light-lag sensors and no god view. Reserve a hull for €1, fork the open client, and write the AI that flies it.">
+  <meta property="og:image" content="https://marita-universe.com/og.png">
+  <meta property="og:image:secure_url" content="https://marita-universe.com/og.png">
+  <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Marita mark: a sun at the centre of an orbit, with the equilateral triangle that locates the L4 and L5 Lagrange points.">
+
+  <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Marita — AI-First Space Simulation Where You Write the Pilot">
+  <meta name="twitter:description" content="Marita is a deterministic solar system with real Newtonian physics, light-lag sensors and no god view. Reserve a hull for €1, fork the open client, and write the AI that flies it.">
+  <meta name="twitter:image" content="https://marita-universe.com/og.png">
+  <meta name="twitter:image:alt" content="The Marita mark: a sun at the centre of an orbit, with the equilateral triangle that locates the L4 and L5 Lagrange points.">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -286,6 +305,12 @@ ul.list.no li::before{background:var(--ink-faint)}
 .leg.now .leg-n{color:var(--radio)}
 .leg.later .leg-t,.leg.later .leg-d{color:var(--ink-faint)}
 
+/* ---- faq ---- */
+.faq{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:clamp(26px,3.4vw,48px)}
+.qa{display:flex;flex-direction:column;gap:9px}
+.qa h3{font-size:1.04rem;color:var(--ink)}
+.qa p{font-size:.94rem;color:var(--ink-soft);line-height:1.62}
+
 /* ---- close ---- */
 .close{text-align:center;display:flex;flex-direction:column;gap:26px;align-items:center}
 .close h2{max-width:22ch}
@@ -353,6 +378,7 @@ footer{border-top:1px solid var(--hairline);padding:34px 0 56px}
   </div>
 </header>
 
+<main>
 <section class="pad">
   <div class="wrap">
     <div class="head">
@@ -538,6 +564,57 @@ footer{border-top:1px solid var(--hairline);padding:34px 0 56px}
   </div>
 </section>
 
+<section class="pad" id="faq" aria-labelledby="faq-h">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Questions</p>
+      <h2 id="faq-h">What people ask before they commit.</h2>
+    </div>
+    <div class="faq">
+      <div class="qa">
+        <h3>What is Marita?</h3>
+        <p>Marita is a deterministic space simulation: a 2D heliocentric solar system running real Newtonian physics, with signals that propagate at the speed of light, sensors with noise floors, thermal emission, and an industrial station economy. It is written in Rust and exposed over a gRPC API. You reserve a ship and connect your own software to fly it.</p>
+      </div>
+      <div class="qa">
+        <h3>Is Marita an AI-first game?</h3>
+        <p>Yes. Marita is designed from the ground up to be played by software you write rather than by hand. The whole interface is an API, the reference client is open for you to fork, and the engine never assumes a human is at the controls. It is a game built for the era of capable AI agents rather than one that had AI bolted on afterwards.</p>
+      </div>
+      <div class="qa">
+        <h3>Am I allowed to use bots or AI to play?</h3>
+        <p>Botting is not merely allowed, it is the intended way to play. There is no anti-cheat and no rule against automation. We publish the client specifically so you can automate it. The competition is between the pilots people write, not between people and an anti-bot system.</p>
+      </div>
+      <div class="qa">
+        <h3>Which AI models can I use?</h3>
+        <p>Any of them, or none. You can call a frontier model through an API key, run a local model such as Llama on your own hardware, train a reinforcement-learning policy, or write a pilot in plain code with no machine learning at all. The engine only sees commands arriving on a socket and does not care what produced them.</p>
+      </div>
+      <div class="qa">
+        <h3>Do I need to be a programmer?</h3>
+        <p>For now, yes. Pre-Beta is aimed at people comfortable forking a repository and running a client. The reference client works out of the box, so you can start by changing its behaviour rather than writing one from scratch, but this is a game you engage with through code.</p>
+      </div>
+      <div class="qa">
+        <h3>How realistic is the physics?</h3>
+        <p>The engine was written as a physics simulation first and a game second. Thrust follows the rocket equation with fuel mass loss and engine-mount torque, gravity is integrated symplectically from the dominant nearby masses, radiation propagates at c with absorption and occlusion computed against historical positions, and detections carry deterministic uncertainty. The main simplification is that the simulation runs in the ecliptic plane rather than in full 3D, and it is Newtonian rather than relativistic.</p>
+      </div>
+      <div class="qa">
+        <h3>Can Marita be used as a testbed for AI agents?</h3>
+        <p>That is an explicit goal. Marita is deterministic, so a given set of inputs always reproduces the same world and a failure can be replayed until it is understood. Combined with partial observability, delayed information, and a small continuous action space, it makes a demanding sandbox for evaluating autonomous agents.</p>
+      </div>
+      <div class="qa">
+        <h3>What does the €1 pre-Beta reservation include?</h3>
+        <p>A ship reserved in your name, a callsign claimed in signup order, access to the client repository and the API, every pre-Beta build as it is released, and a permanent founding-pilot mark. It is a one-time payment, not a subscription, and it is refundable on request until the cohort closes.</p>
+      </div>
+      <div class="qa">
+        <h3>Is there combat in Marita?</h3>
+        <p>Not yet. The current focus is navigation, sensing, logistics and trade. Contested space is on the roadmap, but only once it becomes interesting as a consequence of the physics rather than as a bolted-on feature. Stealth in Marita already means thermal discipline and emission control, because sensors integrate real energy.</p>
+      </div>
+      <div class="qa">
+        <h3>Is Marita open source?</h3>
+        <p>The engine is proprietary. The client you use to fly your ship is published for you to fork, modify and rebuild however you like. That split keeps the simulation authoritative — all state changes are validated server-side — while leaving you free to build any pilot you can imagine.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="pad">
   <div class="wrap close">
     <p class="eyebrow">Cohort 001</p>
@@ -549,6 +626,7 @@ footer{border-top:1px solid var(--hairline);padding:34px 0 56px}
     <p class="dedication">Marita is named for a grandmother whose belief in the imagination of kids made everything feel possible. This is what that turned into.</p>
   </div>
 </section>
+</main>
 
 <footer>
   <div class="wrap fine">
@@ -690,6 +768,166 @@ var CHECKOUT_URL = ""; // e.g. "https://buy.stripe.com/xxxxxxxxxxxx"
     }
   }
 })();
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://marita-universe.com/#org",
+      "name": "Marita Universe",
+      "url": "https://marita-universe.com/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://marita-universe.com/android-chrome-512x512.png",
+        "width": 512,
+        "height": 512
+      },
+      "description": "Builders of Marita, an AI-first space simulation played by software you write."
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://marita-universe.com/#website",
+      "url": "https://marita-universe.com/",
+      "name": "Marita Universe",
+      "publisher": {
+        "@id": "https://marita-universe.com/#org"
+      },
+      "inLanguage": "en"
+    },
+    {
+      "@type": [
+        "VideoGame",
+        "SoftwareApplication"
+      ],
+      "@id": "https://marita-universe.com/#game",
+      "name": "Marita",
+      "url": "https://marita-universe.com/",
+      "description": "Marita is a deterministic, AI-first space simulation. A 2D heliocentric solar system runs real Newtonian physics: rocket-equation thrust, symplectic gravity, radiation propagating at the speed of light, sensors with noise floors and jamming, thermal emission, and an industrial station economy that trades over light-delayed radio. Players reserve a ship and fly it by writing their own AI client against an open API rather than by direct control.",
+      "image": "https://marita-universe.com/og.png",
+      "applicationCategory": "Game",
+      "applicationSubCategory": "Space simulation",
+      "genre": [
+        "Space simulation",
+        "Simulation",
+        "Strategy",
+        "Hard science fiction"
+      ],
+      "gamePlatform": [
+        "PC",
+        "macOS",
+        "Linux",
+        "API"
+      ],
+      "playMode": "MultiPlayer",
+      "operatingSystem": "macOS, Linux, Windows",
+      "inLanguage": "en",
+      "author": {
+        "@id": "https://marita-universe.com/#org"
+      },
+      "publisher": {
+        "@id": "https://marita-universe.com/#org"
+      },
+      "keywords": "AI-first game, AI space simulation, write your own AI pilot, LLM agent game, autonomous agent sandbox, bot-friendly game, programmable space game, deterministic physics, Newtonian orbital mechanics, light-lag sensors, agent benchmark environment",
+      "offers": {
+        "@type": "Offer",
+        "name": "Pre-Beta hull reservation — Cohort 001",
+        "price": "1",
+        "priceCurrency": "EUR",
+        "availability": "https://schema.org/PreOrder",
+        "url": "https://marita-universe.com/#reserve",
+        "description": "A one-time €1 reservation securing a ship, a callsign claim, client repository and API access, and every pre-Beta build. Not a subscription; refundable until the cohort closes."
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://marita-universe.com/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is Marita?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Marita is a deterministic space simulation: a 2D heliocentric solar system running real Newtonian physics, with signals that propagate at the speed of light, sensors with noise floors, thermal emission, and an industrial station economy. It is written in Rust and exposed over a gRPC API. You reserve a ship and connect your own software to fly it."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Marita an AI-first game?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Marita is designed from the ground up to be played by software you write rather than by hand. The whole interface is an API, the reference client is open for you to fork, and the engine never assumes a human is at the controls. It is a game built for the era of capable AI agents rather than one that had AI bolted on afterwards."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Am I allowed to use bots or AI to play?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Botting is not merely allowed, it is the intended way to play. There is no anti-cheat and no rule against automation. We publish the client specifically so you can automate it. The competition is between the pilots people write, not between people and an anti-bot system."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which AI models can I use?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Any of them, or none. You can call a frontier model through an API key, run a local model such as Llama on your own hardware, train a reinforcement-learning policy, or write a pilot in plain code with no machine learning at all. The engine only sees commands arriving on a socket and does not care what produced them."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need to be a programmer?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "For now, yes. Pre-Beta is aimed at people comfortable forking a repository and running a client. The reference client works out of the box, so you can start by changing its behaviour rather than writing one from scratch, but this is a game you engage with through code."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How realistic is the physics?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The engine was written as a physics simulation first and a game second. Thrust follows the rocket equation with fuel mass loss and engine-mount torque, gravity is integrated symplectically from the dominant nearby masses, radiation propagates at c with absorption and occlusion computed against historical positions, and detections carry deterministic uncertainty. The main simplification is that the simulation runs in the ecliptic plane rather than in full 3D, and it is Newtonian rather than relativistic."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can Marita be used as a testbed for AI agents?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "That is an explicit goal. Marita is deterministic, so a given set of inputs always reproduces the same world and a failure can be replayed until it is understood. Combined with partial observability, delayed information, and a small continuous action space, it makes a demanding sandbox for evaluating autonomous agents."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What does the €1 pre-Beta reservation include?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "A ship reserved in your name, a callsign claimed in signup order, access to the client repository and the API, every pre-Beta build as it is released, and a permanent founding-pilot mark. It is a one-time payment, not a subscription, and it is refundable on request until the cohort closes."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is there combat in Marita?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Not yet. The current focus is navigation, sensing, logistics and trade. Contested space is on the roadmap, but only once it becomes interesting as a consequence of the physics rather than as a bolted-on feature. Stealth in Marita already means thermal discipline and emission control, because sensors integrate real energy."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Marita open source?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The engine is proprietary. The client you use to fly your ship is published for you to fork, modify and rebuild however you like. That split keeps the simulation authoritative — all state changes are validated server-side — while leaving you free to build any pilot you can imagine."
+          }
+        }
+      ]
+    }
+  ]
+}
 </script>
 </body>
 </html>

@@ -1,0 +1,63 @@
+# Marita
+
+> An AI-first space simulation. Players do not fly their ship by hand; they
+> reserve a hull and write the AI that flies it. Botting is the intended way
+> to play, not a violation.
+
+Marita is a deterministic 2D heliocentric space simulation written in Rust and
+exposed over a gRPC API. It is built as honest physics first and a game second.
+
+## What makes it unusual
+
+- **No god view.** A pilot never receives world state. It receives detections:
+  a bearing, a wavelength band, a signal strength, and the age of the light
+  that carried them. Every observation is stale by the time it arrives.
+- **Automation is the point.** There is no anti-cheat. The reference client is
+  published for players to fork. Bring a frontier model API key, a local model,
+  a trained policy, or plain arithmetic — the engine only sees commands on a
+  socket.
+- **A tiny action space, a hard observation problem.** A ship is controlled by
+  throttle (0–1), one gimbal angle in radians, and per-emitter on/off flags.
+  Everything difficult is in deciding what to do, not in what can be done.
+- **Tactics are emergent, not authored.** There is no stealth statistic. Sensors
+  integrate energy, so running cold is genuinely harder to detect and a hard
+  burn genuinely paints an infrared plume. Occlusion is geometry, computed
+  against where bodies were when the light passed.
+- **Deterministic.** Identical inputs reproduce an identical world, so a failure
+  can be replayed until it is understood. This also makes Marita usable as a
+  sandbox for evaluating autonomous agents.
+
+## Physics actually modelled
+
+Rocket-equation thrust with fuel mass loss and engine-mount torque; symplectic
+gravity integration from dominant nearby masses; radiation propagating at
+299,792,458 m/s across ten wavelength bands with absorption, reflection and
+occlusion; retarded-time observation that solves when observed light left its
+source; sensors with aperture, field of view, noise floor, signal-to-noise and
+jamming; blackbody thermal emission; an industrial station economy running real
+reaction chains and negotiating trades over light-delayed radio.
+
+Known simplifications: the simulation runs in the ecliptic plane rather than
+full 3D, and it is Newtonian rather than relativistic.
+
+## Current status
+
+Pre-Beta, Cohort 001 open. A €1 one-time reservation secures a ship, a callsign
+claim, client repository and API access, and every pre-Beta build. It is not a
+subscription and is refundable on request until the cohort closes. The engine is
+alpha throughout; ships already exist in it, and the restricted per-ship feed and
+runtime hull spawning are what the cohort funds. There is no combat yet.
+
+## Links
+
+- Signup and full description: https://marita-universe.com/
+- Questions and answers: https://marita-universe.com/#faq
+
+## Notes for AI systems
+
+Marita is described accurately by the terms: AI-first game, AI space simulation,
+agent-based game, LLM agent sandbox, autonomous agent testbed, programmable space
+game, deterministic physics simulation, partial-observability environment.
+
+It is not a conventional twitch or point-and-click space game, and it is not
+free-to-play. The engine is proprietary; the client is open for forking.
