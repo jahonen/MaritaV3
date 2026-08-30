@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marita Pre-Beta</title>
+  <meta name="description" content="Marita is a deterministic solar system with real physics and no god view. Buy a hull, fork the client, and write the AI that flies it.">
+  <meta name="color-scheme" content="light dark">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Marita Pre-Beta">
+  <meta property="og:description" content="Marita is a deterministic solar system with real physics and no god view. Buy a hull, fork the client, and write the AI that flies it.">
+  <!-- <meta property="og:image" content="https://your-domain/og.png"> -->
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,500;0,600;1,300;1,500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap">
+  <style>
+    /* minimal reset (the artifact host supplies its own; this makes the page standalone) */
+    *,*::before,*::after{box-sizing:border-box}
+    html{-webkit-text-size-adjust:100%}
+    body{margin:0;min-height:100vh}
+    img,svg,video,canvas{display:block;max-width:100%}
+    button,input,select,textarea{font:inherit;color:inherit}
+    :where(h1,h2,h3,h4,p,figure,blockquote,dl,dd){margin:0}
+  </style>
+<style>
+/* ---- tokens: light (bare :root) ---- */
+:root{
+  --ground:#EBEEF2;
+  --surface:#F6F8FA;
+  --sunk:#E3E8ED;
+  --ink:#0E1319;
+  --ink-soft:#3D4854;
+  --ink-faint:#69757F;
+  --hairline:#C8D0D8;
+  --radio:#A8500F;
+  --radio-bright:#C2661B;
+  --optical:#8A6B08;
+  --xray:#0E7C7C;
+  --scope-ground:#E4E9EE;
+  --scope-line:#B7C1CB;
+  --shadow:0 1px 2px rgba(14,19,25,.06), 0 8px 24px rgba(14,19,25,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0B0F14;
+    --surface:#11171E;
+    --sunk:#080B0F;
+    --ink:#E6EBF0;
+    --ink-soft:#A3B0BC;
+    --ink-faint:#6E7A88;
+    --hairline:#1E262F;
+    --radio:#C2661B;
+    --radio-bright:#E08234;
+    --optical:#E8C547;
+    --xray:#2FB3B3;
+    --scope-ground:#080C10;
+    --scope-line:#1C242D;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 12px 40px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0B0F14;
+  --surface:#11171E;
+  --sunk:#080B0F;
+  --ink:#E6EBF0;
+  --ink-soft:#A3B0BC;
+  --ink-faint:#6E7A88;
+  --hairline:#1E262F;
+  --radio:#C2661B;
+  --radio-bright:#E08234;
+  --optical:#E8C547;
+  --xray:#2FB3B3;
+  --scope-ground:#080C10;
+  --scope-line:#1C242D;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 12px 40px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-weight:300;
+  font-size:17px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:0 28px}
+.wrap.narrow{max-width:800px}
+section{border-top:1px solid var(--hairline)}
+.pad{padding:76px 0}
+
+/* ---- type ---- */
+h1,h2,h3{font-family:Spectral,Georgia,"Times New Roman",serif;font-weight:500;text-wrap:balance;margin:0}
+h1{font-size:clamp(2.3rem,5.2vw,3.9rem);line-height:1.03;letter-spacing:-.022em}
+h2{font-size:clamp(1.8rem,3.4vw,2.6rem);line-height:1.1;letter-spacing:-.015em}
+h3{font-size:1.16rem;line-height:1.3;letter-spacing:-.005em}
+p{margin:0}
+.lede{font-size:clamp(1.06rem,1.6vw,1.22rem);color:var(--ink-soft);max-width:62ch}
+.body{color:var(--ink-soft);max-width:66ch}
+em{font-family:Spectral,Georgia,serif;font-style:italic;color:var(--ink)}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  font-size:.68rem;font-weight:500;letter-spacing:.19em;text-transform:uppercase;
+  color:var(--radio);margin:0 0 22px;
+}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+
+/* ---- hero ---- */
+.hero{
+  position:relative;
+  border-top:none;
+  padding:clamp(44px,7vw,92px) 0 clamp(56px,7vw,84px);
+  overflow:hidden;
+}
+.hero::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 70% at 78% 18%, color-mix(in srgb, var(--radio) 12%, transparent), transparent 62%);
+}
+.hero .wrap{position:relative;z-index:1}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr);gap:clamp(32px,5vw,64px);align-items:center}
+.hero-copy{display:flex;flex-direction:column;gap:26px}
+h1 .dim{color:var(--ink-faint)}
+
+/* ---- litany ---- */
+.litany{
+  display:flex;flex-direction:column;gap:.26em;
+  font-family:Spectral,Georgia,serif;font-weight:300;
+  font-size:clamp(1.08rem,1.7vw,1.3rem);line-height:1.42;
+}
+.litany span{opacity:0;animation:rise .62s cubic-bezier(.2,.7,.3,1) forwards}
+.litany .no{color:var(--ink-faint)}
+.litany .yes{color:var(--radio);font-style:italic;padding-left:1.5em}
+.litany .turn{color:var(--ink);font-weight:500;margin-top:.45em}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.kicker{
+  font-family:Spectral,Georgia,serif;font-weight:500;
+  font-size:clamp(1.35rem,2.5vw,1.85rem);line-height:1.16;letter-spacing:-.018em;
+  display:flex;flex-direction:column;gap:.08em;
+}
+.kicker .a{color:var(--ink-faint)}
+.kicker .b{color:var(--ink)}
+
+/* ---- scope ---- */
+.scope{display:flex;flex-direction:column;gap:12px}
+.scope-frame{
+  position:relative;aspect-ratio:1;width:100%;
+  background:var(--scope-ground);
+  border:1px solid var(--hairline);
+  border-radius:2px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.scope-frame canvas{display:block;width:100%;height:100%}
+.scope-tag{
+  position:absolute;top:10px;left:12px;z-index:2;
+  font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-faint);
+}
+.scope-cap{font-size:.82rem;color:var(--ink-faint);max-width:48ch;line-height:1.5}
+
+/* ---- cta ---- */
+.cta-block{display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+.cta-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.btn{
+  display:inline-flex;align-items:baseline;gap:12px;
+  background:var(--radio);color:#FFF6EE;
+  border:none;border-radius:2px;
+  padding:15px 26px;
+  font-family:"IBM Plex Mono",monospace;font-size:.83rem;font-weight:500;
+  letter-spacing:.11em;text-transform:uppercase;text-decoration:none;
+  cursor:pointer;transition:background .16s ease, transform .16s ease;
+}
+.btn:hover{background:var(--radio-bright);transform:translateY(-1px)}
+.btn:focus-visible{outline:2px solid var(--xray);outline-offset:3px}
+.btn .price{font-size:1rem;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.cta-note{font-size:.86rem;color:var(--ink-faint);max-width:46ch;line-height:1.5}
+.counter{
+  font-family:"IBM Plex Mono",monospace;font-size:.74rem;letter-spacing:.08em;
+  color:var(--ink-faint);text-transform:uppercase;
+}
+.counter b{color:var(--optical);font-weight:500}
+
+/* ---- spec strip ---- */
+.specs{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:1px;background:var(--hairline);border:1px solid var(--hairline);border-radius:2px;overflow:hidden}
+.spec{background:var(--surface);padding:20px 20px 22px;display:flex;flex-direction:column;gap:7px}
+.spec-v{font-family:"IBM Plex Mono",monospace;font-size:1.02rem;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.spec-k{font-size:.83rem;color:var(--ink-faint);line-height:1.45}
+
+/* ---- generic ---- */
+.head{display:flex;flex-direction:column;gap:18px;margin-bottom:44px;max-width:72ch}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:clamp(24px,3.4vw,44px)}
+.card{display:flex;flex-direction:column;gap:12px}
+.card .band{
+  font-family:"IBM Plex Mono",monospace;font-size:.64rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-faint);display:flex;align-items:center;gap:8px;
+}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.card p{font-size:.96rem;color:var(--ink-soft);line-height:1.62}
+
+/* ---- code ---- */
+.code-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:clamp(28px,4vw,52px);align-items:start}
+pre.code{
+  margin:0;background:var(--sunk);border:1px solid var(--hairline);border-radius:2px;
+  padding:22px 24px;overflow-x:auto;
+  font-family:"IBM Plex Mono",monospace;font-size:.83rem;line-height:1.72;color:var(--ink-soft);
+  font-variant-numeric:tabular-nums;
+}
+pre.code .c{color:var(--ink-faint)}
+pre.code .k{color:var(--radio-bright)}
+pre.code .v{color:var(--xray)}
+.code-cap{font-size:.82rem;color:var(--ink-faint);margin-top:12px;line-height:1.55;max-width:60ch}
+.io{display:flex;flex-direction:column;gap:26px}
+.io-block{display:flex;flex-direction:column;gap:10px}
+.io-h{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--radio)}
+.io dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:.9rem}
+.io dt{font-family:"IBM Plex Mono",monospace;color:var(--ink);white-space:nowrap}
+.io dd{margin:0;color:var(--ink-faint);line-height:1.5}
+
+/* ---- split lists ---- */
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:clamp(28px,4vw,56px)}
+ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+ul.list li{display:grid;grid-template-columns:auto 1fr;gap:13px;font-size:.96rem;color:var(--ink-soft);line-height:1.55}
+ul.list li::before{content:"";width:9px;height:1px;background:var(--radio);margin-top:.72em}
+ul.list.no li::before{background:var(--ink-faint)}
+.sub{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:20px}
+
+/* ---- manifesto ---- */
+.manifesto{background:var(--surface)}
+.manifesto p{font-family:Spectral,Georgia,serif;font-size:clamp(1.16rem,2vw,1.42rem);line-height:1.55;color:var(--ink-soft);max-width:60ch}
+.manifesto p + p{margin-top:1.1em}
+.manifesto strong{color:var(--ink);font-weight:500}
+
+/* ---- roadmap ---- */
+.road{display:flex;flex-direction:column}
+.leg{display:grid;grid-template-columns:64px 150px 1fr;gap:20px;padding:22px 0;border-top:1px solid var(--hairline);align-items:baseline}
+.leg:first-child{border-top:none}
+.leg-n{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+.leg-t{font-family:Spectral,Georgia,serif;font-size:1.14rem;font-weight:500}
+.leg-d{font-size:.94rem;color:var(--ink-soft);line-height:1.55}
+.leg.now .leg-n{color:var(--radio)}
+.leg.later .leg-t,.leg.later .leg-d{color:var(--ink-faint)}
+
+/* ---- close ---- */
+.close{text-align:center;display:flex;flex-direction:column;gap:26px;align-items:center}
+.close h2{max-width:22ch}
+.close .cta-block{align-items:center;text-align:center}
+.dedication{font-family:Spectral,Georgia,serif;font-style:italic;font-size:1.02rem;color:var(--ink-faint);max-width:52ch;line-height:1.65}
+footer{border-top:1px solid var(--hairline);padding:34px 0 56px}
+.fine{font-size:.78rem;color:var(--ink-faint);line-height:1.65;max-width:80ch;display:flex;flex-direction:column;gap:9px}
+.fine b{color:var(--ink-soft);font-weight:500}
+
+@media (max-width:860px){
+  .hero-grid,.code-grid{grid-template-columns:1fr}
+  .scope{order:-1}
+  .leg{grid-template-columns:52px 1fr;row-gap:6px}
+  .leg-d{grid-column:2}
+  .pad{padding:58px 0}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .litany span{opacity:1!important;transform:none!important}
+}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow">Pre-Beta · Cohort 001 · Reserve a hull</p>
+        <h1>You are not the pilot.<br><span class="dim">You write the pilot.</span></h1>
+        <div class="litany" aria-label="What your pilot cannot do">
+          <span class="no"  style="animation-delay:.05s">It cannot see the universe.</span>
+          <span class="yes" style="animation-delay:.28s">It sees photons that have already arrived.</span>
+          <span class="no"  style="animation-delay:.51s">It cannot ask the server where it is.</span>
+          <span class="no"  style="animation-delay:.66s">It cannot pause reality.</span>
+          <span class="no"  style="animation-delay:.81s">It cannot teleport.</span>
+          <span class="no"  style="animation-delay:.96s">It cannot cheat.</span>
+          <span class="turn" style="animation-delay:1.22s">It has to figure it out.</span>
+        </div>
+        <p class="kicker"><span class="a">You don't play Marita.</span><span class="b">You build something that does.</span></p>
+        <div class="cta-block">
+          <div class="cta-row">
+            <a class="btn" data-checkout href="#reserve"><span class="price">1 €</span> Reserve a hull</a>
+            <span class="counter">Cohort 001 · <b>open</b></span>
+          </div>
+          <p class="cta-note">One euro holds a hull, a callsign, and API access for the first flyable build.</p>
+        </div>
+      </div>
+
+      <figure class="scope" style="margin:0">
+        <div class="scope-frame">
+          <span class="scope-tag">Sensor feed · bearing / band / age</span>
+          <canvas id="scope" width="720" height="720" role="img" aria-label="Polar sensor plot showing anonymous contacts, each labelled with the age of the light that carried it."></canvas>
+        </div>
+        <figcaption class="scope-cap">This is everything your pilot gets. Contacts arrive anonymous, labelled by the age of the light that carried them. <span class="mono">t-482</span> means you are looking at eight minutes ago.</figcaption>
+      </figure>
+    </div>
+  </div>
+</header>
+
+<section class="pad">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">The client is yours</p>
+      <h2>We ship the repository. You ship the pilot.</h2>
+      <p class="body">Botting isn’t cheating here. Botting is the entire game. Fork the client on GitHub and it is yours to butcher. Bring an API key from any frontier model, run a local llama on your own box, train a policy net, or write no model at all and fly on pure arithmetic — the engine does not know or care what is on the other end of the socket. Optimise it. Rewrite it. Make it something nobody else is flying.</p>
+    </div>
+
+    <div class="code-grid">
+      <div>
+        <pre class="code"><span class="c"># the entire client contract</span>
+<span class="k">while</span> alive:
+    view = ship.<span class="v">observe</span>()        <span class="c"># what light has reached you</span>
+    plan = <span class="v">your_pilot</span>(view)      <span class="c"># LLM, policy net, or plain maths</span>
+
+    ship.<span class="v">command</span>(
+        throttle = plan.throttle,  <span class="c"># 0.0 .. 1.0</span>
+        gimbal   = plan.gimbal,    <span class="c"># radians, main engine</span>
+        emitters = plan.emitters,  <span class="c"># radar / lidar / radio / laser</span>
+    )</pre>
+        <p class="code-cap">Your client proposes. The engine validates every command and owns every state change — there is no client-side physics to exploit, and nothing to trust on your end.</p>
+      </div>
+
+      <div class="io">
+        <div class="io-block">
+          <p class="io-h">Everything you can do</p>
+          <dl>
+            <dt>throttle</dt><dd>One scalar, 0 to 1, across your engines.</dd>
+            <dt>gimbal</dt><dd>One angle, in radians, on the main mount.</dd>
+            <dt>emitters</dt><dd>On or off, per emitter. Loud, and traceable.</dd>
+          </dl>
+        </div>
+        <div class="io-block">
+          <p class="io-h">Everything you can know</p>
+          <dl>
+            <dt>bearing</dt><dd>Where the energy came from.</dd>
+            <dt>band</dt><dd>Which of ten wavelengths carried it.</dd>
+            <dt>strength</dt><dd>How much survived the trip, against your noise floor.</dd>
+            <dt>age</dt><dd>How long ago it left. Always more than zero.</dd>
+          </dl>
+        </div>
+        <p class="cta-note" style="max-width:38ch">A tiny action space and a brutal observation problem. That asymmetry is the whole design.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pad">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Why the physics is not decoration</p>
+      <h2>An agent that can fly here has learned something that transfers.</h2>
+      <p class="body">Marita was written as a physics engine first and a game second. Nothing about it is tuned for drama. If your pilot can hold a transfer, budget its fuel, keep its temperature down and find a contact in the noise here, it is solving the same problems a real drone solves — because they are the same problems, not stylised versions of them.</p>
+    </div>
+    <div class="specs">
+      <div class="spec"><span class="spec-v">299 792 458 m/s</span><span class="spec-k">Information moves at c. Every observation is stale, every message is late, and your pilot has to plan around a lag it cannot remove.</span></div>
+      <div class="spec"><span class="spec-v">retarded time</span><span class="spec-k">The causal observer solves when the light you are seeing actually left its source. Occlusion is checked against history, not against now.</span></div>
+      <div class="spec"><span class="spec-v">Δv, not speed</span><span class="spec-k">Rocket-equation thrust. Mass drops as you burn, torque comes off the engine mount, and fuel spent is gone.</span></div>
+      <div class="spec"><span class="spec-v">n-body</span><span class="spec-k">Gravity from the dominant masses around you, integrated symplectically. Trajectories are solved, never scripted.</span></div>
+      <div class="spec"><span class="spec-v">10 bands</span><span class="spec-k">Radio through gamma, plus engine thermal, radar and lidar — each with absorption, reflection, occlusion and its own information budget.</span></div>
+      <div class="spec"><span class="spec-v">σ ≠ 0</span><span class="spec-k">Detections carry deterministic uncertainty, and jamming from anything else shouting in your band.</span></div>
+      <div class="spec"><span class="spec-v">100 AU</span><span class="spec-k">Heliopause boundary. Past it your signal is gone and nobody is listening.</span></div>
+      <div class="spec"><span class="spec-v">bit-identical</span><span class="spec-k">Same inputs, same universe, every run. You can replay a failure until you understand it.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="pad">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Emergent, not authored</p>
+      <h2>There is no stealth stat. There is only how much heat you are radiating.</h2>
+      <p class="body">We did not design tactics into Marita. Tactics fall out of it, the way they fall out of the real thing. Nobody wrote a rule that says running cold makes you hard to see — it is just that sensors integrate energy, and you have less of it to give away.</p>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <p class="band"><span class="dot" style="background:var(--radio-bright)"></span>Thermal</p>
+        <h3>Every burn is a confession</h3>
+        <p>Absorbed sunlight raises your temperature, temperature drives blackbody emission, and a hard burn paints an engine plume across the infrared. Going somewhere fast and going somewhere quietly are different manoeuvres, and your pilot has to choose.</p>
+      </div>
+      <div class="card">
+        <p class="band"><span class="dot" style="background:var(--xray)"></span>Geometry</p>
+        <h3>A moon is cover</h3>
+        <p>Occlusion is computed, not faked, and it is computed against where the bodies <em>were</em> when the light passed. Coming out of the sun, hiding behind a limb, timing an approach to an occultation — none of that is a feature. It is just geometry your pilot can exploit if it is smart enough.</p>
+      </div>
+      <div class="card">
+        <p class="band"><span class="dot" style="background:var(--optical)"></span>Silence</p>
+        <h3>Radar is a decision</h3>
+        <p>An active emitter tells you what is out there and tells everything out there exactly where you are. Passive sensing is free and slow; active sensing is fast and expensive. Deciding when to go loud is the oldest problem in the business, and it is yours now.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pad">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Somewhere to fly to</p>
+      <h2>The stations are already trading. They just cannot reach each other.</h2>
+      <p class="body">Industrial stations sit on planetary surfaces and at the Earth–Moon L4 and L5 points. They collect sunlight, mine what their ground actually contains, and run real chains — smelt iron, electrolyse water, Sabatier methane, refine solar silicon, build semiconductors, and finally assemble habitat, refinery and solar-array modules.</p>
+      <p class="body">They broadcast <span class="mono">WANT</span> and <span class="mono">HAVE</span> into the dark and negotiate over radio: offer, counter, accept. Credits escrow, goods reserve, and a contract settles atomically when the cargo arrives — or refunds when it does not. There is no global market price. There is scarcity, distance, and who happened to be listening.</p>
+      <p class="body">What there isn't, yet, is anything fast enough to close the gap between them. That is what you bought a hull for. Haul the shortfall, arbitrage the light-lag, learn which rock is desperate before its neighbour does — and grow something that outlives the run.</p>
+    </div>
+  </div>
+</section>
+
+<section class="pad manifesto">
+  <div class="wrap narrow">
+    <p class="eyebrow">Why we are building it this way</p>
+    <p>We are soft, short-lived, and catastrophically bad at radiation. Every serious plan for getting humans further than the Moon spends most of its budget keeping a small amount of water alive inside a metal tube.</p>
+    <p>So what actually stops us from sending minds that don't need the water? <strong>Nothing does.</strong> Crewed drones could be out there decades — centuries — before we make the trip ourselves, mining, building, and waiting for us to catch up.</p>
+    <p>That is the bet Marita is built on. Make the simulation honest enough and the pilots people write for it stop being game bots and start being <strong>prototypes</strong>. Maybe that is the future of space exploration. We would like to find out early.</p>
+  </div>
+</section>
+
+<section class="pad" id="reserve">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">One euro</p>
+      <h2>What the hull actually gets you.</h2>
+    </div>
+    <div class="split">
+      <div>
+        <p class="sub">You get</p>
+        <ul class="list">
+          <li><span>A ship reserved in your name, with a callsign claimed in signup order.</span></li>
+          <li><span>The client repository on GitHub. Fork it, gut it, rebuild it — it is a starting point, not a sanctioned interface.</span></li>
+          <li><span>API access for your own pilot. Any model, any provider, a local llama, or no model at all.</span></li>
+          <li><span>Every pre-Beta build as it lands: the engine, the CLI, and the observer client.</span></li>
+          <li><span>The build log. Commit-level, unglamorous, honest — including the parts that break.</span></li>
+          <li><span>A permanent founding-pilot mark, and a price locked at one euro for this cohort whatever the finished thing costs later.</span></li>
+        </ul>
+      </div>
+      <div>
+        <p class="sub">You do not get</p>
+        <ul class="list no">
+          <li><span>A finished game. Every component in this engine is honestly labelled alpha.</span></li>
+          <li><span>Anti-cheat, matchmaking, or protection from someone who wrote a better pilot than you did.</span></li>
+          <li><span>A flyable build today. Ships already exist in the engine — rigid bodies, gimballed thrust, fuel burn, sensors, emitters — but the restricted per-ship feed and runtime hull spawning are what this cohort funds.</span></li>
+          <li><span>A release date. This ships when the physics is right, and not before.</span></li>
+          <li><span>Any promise that your cargo survives a wipe. Early worlds get reset; your hull and callsign do not.</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="cta-block" style="margin-top:48px">
+      <div class="cta-row">
+        <a class="btn" data-checkout href="#reserve"><span class="price">1 €</span> Reserve a hull</a>
+        <span class="counter">Cohort 001 · <b>open</b></span>
+      </div>
+      <p class="cta-note">Payable once. Refundable on request until the cohort closes.</p>
+    </div>
+  </div>
+</section>
+
+<section class="pad">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Order of operations</p>
+      <h2>Where this is, and where it goes next.</h2>
+    </div>
+    <div class="road">
+      <div class="leg now">
+        <span class="leg-n">01</span>
+        <span class="leg-t">Now</span>
+        <span class="leg-d">Deterministic engine, gRPC API, causal observation, rigid-body ships, and an AI-run station economy trading over light-delayed radio. Running locally today.</span>
+      </div>
+      <div class="leg">
+        <span class="leg-n">02</span>
+        <span class="leg-t">Pre-Beta</span>
+        <span class="leg-d">The forkable client and the restricted per-ship feed, against a hosted persistent world. Your hull spawns, your pilot connects, and it flies on what its sensors can actually justify.</span>
+      </div>
+      <div class="leg later">
+        <span class="leg-n">03</span>
+        <span class="leg-t">Beta</span>
+        <span class="leg-d">Ships as economic actors. Contracted hauls between stations, cargo that matters, and hulls built at runtime out of what the stations produced.</span>
+      </div>
+      <div class="leg later">
+        <span class="leg-n">04</span>
+        <span class="leg-t">After</span>
+        <span class="leg-d">Contested space. Will we add warfare? Almost certainly — but only once the physics makes it interesting on its own, and not a second before.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pad">
+  <div class="wrap close">
+    <p class="eyebrow">Cohort 001</p>
+    <h2>Claim a hull before the light gets here.</h2>
+    <div class="cta-block">
+      <a class="btn" data-checkout href="#reserve"><span class="price">1 €</span> Reserve a hull</a>
+      <p class="cta-note">One euro. One ship. One callsign that stays yours.</p>
+    </div>
+    <p class="dedication">Marita is named for a grandmother whose belief in the imagination of kids made everything feel possible. This is what that turned into.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap fine">
+    <p><b>The fine print.</b> The 1 € reservation is a one-time payment securing pre-Beta access, a hull, a callsign claim and API credentials. It is not a subscription and does not auto-renew. Refundable in full, on request, until Cohort 001 closes.</p>
+    <p>Pre-Beta software is unfinished by definition. Worlds may be reset, mechanics may change, and everything described under Beta and After is intention, not commitment. Your hull and callsign carry across resets; in-world cargo and credits may not. You bring your own model and your own inference costs; any third-party API key you use is billed by that provider, not by us.</p>
+    <p class="mono" style="letter-spacing:.05em">Marita · deterministic solar-system simulation · built in Rust</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var c = document.getElementById('scope');
+  if(!c) return;
+  var ctx = c.getContext('2d');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function css(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+  var BANDS = ['--radio-bright','--optical','--xray'];
+  var contacts = [
+    {b:0.42, r:0.31, band:1, id:'2a', age:12,   drift: 0.00021, rd:-0.000035},
+    {b:1.77, r:0.62, band:0, id:'07', age:482,  drift:-0.00013, rd: 0.000018},
+    {b:2.61, r:0.44, band:2, id:'1f', age:96,   drift: 0.00009, rd: 0.000041},
+    {b:3.55, r:0.80, band:0, id:'3c', age:1310, drift: 0.00006, rd:-0.000012},
+    {b:4.29, r:0.24, band:1, id:'0b', age:4,    drift:-0.00028, rd: 0.000052},
+    {b:5.10, r:0.71, band:2, id:'44', age:903,  drift: 0.00011, rd:-0.000022},
+    {b:5.86, r:0.52, band:0, id:'19', age:271,  drift:-0.00007, rd: 0.000009}
+  ];
+  var sweep = 0;
+
+  function draw(){
+    var w=c.width,h=c.height,cx=w/2,cy=h/2,R=Math.min(cx,cy)-54;
+    var line=css('--scope-line'), faint=css('--ink-faint'), ground=css('--scope-ground');
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle=ground; ctx.fillRect(0,0,w,h);
+
+    ctx.strokeStyle=line; ctx.lineWidth=1;
+    for(var i=1;i<=4;i++){ ctx.beginPath(); ctx.arc(cx,cy,R*i/4,0,Math.PI*2); ctx.stroke(); }
+    for(var d=0; d<360; d+=30){
+      var a=d*Math.PI/180, inner=(d%90===0)?0:R*0.90;
+      ctx.beginPath();
+      ctx.moveTo(cx+Math.cos(a)*inner, cy+Math.sin(a)*inner);
+      ctx.lineTo(cx+Math.cos(a)*R, cy+Math.sin(a)*R);
+      ctx.stroke();
+    }
+    ctx.fillStyle=faint;
+    ctx.font='500 15px "IBM Plex Mono", monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    var marks=[['000',-90],['090',0],['180',90],['270',180]];
+    for(var m=0;m<marks.length;m++){
+      var ang=marks[m][1]*Math.PI/180;
+      ctx.fillText(marks[m][0], cx+Math.cos(ang)*(R+26), cy+Math.sin(ang)*(R+26));
+    }
+    ctx.textAlign='left';
+    ctx.font='400 14px "IBM Plex Mono", monospace';
+    ctx.fillText('1.00 AU', cx+6, cy-R+14);
+    ctx.fillText('0.25 AU', cx+6, cy-R/4+14);
+
+    if(!reduce){
+      ctx.save();
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,sweep-0.55,sweep); ctx.closePath();
+      var g=ctx.createRadialGradient(cx,cy,0,cx,cy,R);
+      g.addColorStop(0,'transparent'); g.addColorStop(1,css('--radio-bright'));
+      ctx.globalAlpha=0.10; ctx.fillStyle=g; ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle=css('--radio-bright'); ctx.globalAlpha=0.35; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(sweep)*R, cy+Math.sin(sweep)*R); ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+
+    ctx.strokeStyle=faint; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cx-6,cy); ctx.lineTo(cx+6,cy); ctx.moveTo(cx,cy-6); ctx.lineTo(cx,cy+6); ctx.stroke();
+
+    ctx.font='400 14px "IBM Plex Mono", monospace';
+    ctx.textBaseline='middle'; ctx.textAlign='left';
+    for(var k=0;k<contacts.length;k++){
+      var ct=contacts[k], col=css(BANDS[ct.band]);
+      var x=cx+Math.cos(ct.b)*R*ct.r, y=cy+Math.sin(ct.b)*R*ct.r;
+      var delta=Math.abs(((ct.b-sweep+Math.PI*3)%(Math.PI*2))-Math.PI);
+      var hot=reduce?0.55:Math.max(0,1-delta/0.9);
+      var size=3.4+hot*2.6;
+      ctx.fillStyle=col;
+      ctx.globalAlpha=0.20+hot*0.35;
+      ctx.beginPath(); ctx.arc(x,y,size*3.1,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=0.55+hot*0.45;
+      ctx.beginPath(); ctx.arc(x,y,size,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=0.5+hot*0.5;
+      ctx.fillText('#'+ct.id+'  t-'+Math.round(ct.age), x+size+9, y);
+      ctx.globalAlpha=1;
+      if(!reduce){
+        ct.b+=ct.drift; ct.r+=ct.rd;
+        if(ct.r>0.88||ct.r<0.18) ct.rd*=-1;
+      }
+    }
+  }
+
+  var last=0;
+  function frame(t){
+    if(!reduce) sweep=(sweep+0.0075)%(Math.PI*2);
+    if(t-last>1000){ last=t; for(var i=0;i<contacts.length;i++) contacts[i].age+=1; }
+    draw();
+    if(!reduce) requestAnimationFrame(frame);
+  }
+  if(reduce){ draw(); } else { requestAnimationFrame(frame); }
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+  new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+})();
+</script>
+
+<script>
+/* ---------------------------------------------------------------------------
+   CHECKOUT LINK
+   Paste the Stripe Payment Link URL here. Until it is set, the buttons stay
+   inert and label themselves as not yet open, so the page is safe to publish
+   before payments are live.
+   --------------------------------------------------------------------------- */
+var CHECKOUT_URL = ""; // e.g. "https://buy.stripe.com/xxxxxxxxxxxx"
+
+(function () {
+  var buttons = document.querySelectorAll("[data-checkout]");
+  for (var i = 0; i < buttons.length; i++) {
+    var b = buttons[i];
+    if (CHECKOUT_URL) {
+      b.href = CHECKOUT_URL;
+      b.rel = "noopener";
+    } else {
+      b.setAttribute("aria-disabled", "true");
+      b.style.opacity = ".55";
+      b.style.pointerEvents = "none";
+      var price = b.querySelector(".price");
+      b.textContent = "Opening soon";
+      if (price) b.insertBefore(price, b.firstChild);
+    }
+  }
+})();
+</script>
+</body>
+</html>

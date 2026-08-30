@@ -1,0 +1,34 @@
+# Optional alternative to the Cloudflare Pages Git integration.
+#
+# Rename this file to `deploy-marketing.yml` to enable it, and set the secrets
+# CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID first — without them the job
+# fails on every push.
+#
+# Do not run this at the same time as the dashboard Git integration, or each
+# push deploys twice. See docs/deploy-marketing.md.
+
+name: Deploy marketing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'marketing/**'
+      - '.github/workflows/deploy-marketing.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy marketing/prebeta --project-name=marita-prebeta
