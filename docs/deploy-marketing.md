@@ -69,3 +69,53 @@ pick one and disconnect the other, or every push deploys twice.
 revalidating so an update is visible immediately rather than sitting in a CDN
 cache. Cloudflare Pages reads this file from the output directory; it is not
 served to visitors.
+
+## IndexNow
+
+IndexNow is a push protocol: rather than waiting to be crawled, you tell search
+engines that a URL changed. **Bing, Yandex, Seznam, Naver and Yep participate.
+Google does not** — it ignores IndexNow entirely, so Search Console and ordinary
+crawling remain the only route there.
+
+There are two ways to do this and they can coexist.
+
+### Option A — Cloudflare Crawler Hints (recommended, zero maintenance)
+
+Cloudflare is an IndexNow partner and can submit changes for you automatically,
+with no key file and no script.
+
+Cloudflare dashboard → your domain → **Caching** → **Configuration** →
+enable **Crawler Hints**.
+
+That is the whole setup. Cloudflare watches for content changes and notifies
+IndexNow participants on your behalf.
+
+### Option B — explicit key and submission script
+
+Useful when you want to submit at a precise moment, for example immediately
+after a deploy, or to submit specific URLs.
+
+The key is already in place:
+
+- Key file: `marketing/prebeta/<key>.txt`, served at the domain root. It is a
+  self-chosen random string, published deliberately — it proves you control the
+  domain and is not a secret.
+- Submitter: `scripts/indexnow.sh`
+
+```bash
+scripts/indexnow.sh                     # submit the home page
+scripts/indexnow.sh https://marita-universe.com/
+```
+
+The script refuses to submit if the key file is not reachable, since that is the
+usual cause of an otherwise silent rejection.
+
+Response codes: `200`/`202` accepted, `403` key not valid for the host, `422`
+URL/key mismatch, `429` rate limited.
+
+### When to submit
+
+Submit when page *content* meaningfully changes — new copy, new sections, a
+price change. Do not submit on every deploy; repeatedly pushing an unchanged URL
+is what gets a host rate limited. There is no benefit to submitting more than
+once for the same change.

@@ -32,3 +32,19 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy marketing/prebeta --project-name=marita-prebeta
+
+      # Notify IndexNow-participating engines (Bing, Yandex, Seznam, Naver, Yep).
+      # Google does not participate. Only fires when index.html actually changed,
+      # so routine asset-only deploys do not spam the endpoint.
+      - name: Check whether page content changed
+        id: changed
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -q '^marketing/prebeta/index.html$'; then
+            echo "content=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "content=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Submit to IndexNow
+        if: steps.changed.outputs.content == 'true'
+        run: scripts/indexnow.sh
