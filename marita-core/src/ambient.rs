@@ -31,6 +31,14 @@ pub struct AmbientField {
 }
 
 impl AmbientField {
+    pub fn empty() -> Self {
+        Self {
+            solar_source: None,
+            thermal_sources: Vec::new(),
+            shadow_casters: Vec::new(),
+        }
+    }
+
     /// Build the field from the current massive bodies and ships.
     pub fn new(bodies: &[Body], ships: &[Ship]) -> Self {
         let solar_source = bodies
@@ -269,43 +277,42 @@ pub struct AmbientSource {
     pub spectrum: Spectrum,
 }
 
-/// Return a normalized spectrum for a blackbody at `temperature` K.
-///
-/// This is a coarse approximation: all emitted power is placed in the single
-/// wavelength bin whose representative wavelength is closest to the Wien peak.
-fn blackbody_spectrum(temperature: f64) -> Spectrum {
+/// Return a normalized ten-bin Planck approximation for a blackbody.
+/// Physical bands receive energy according to spectral radiance sampled over
+/// logarithmic wavelength intervals; engine-signature/radar/lidar bins remain
+/// reserved for intentional emissions.
+pub fn blackbody_spectrum(temperature: f64) -> Spectrum {
     let mut spectrum = Spectrum::zero();
-    if temperature <= 0.0 {
+    if temperature <= 0.0 || !temperature.is_finite() {
         return spectrum;
     }
-    let peak = 2.898e-3 / temperature;
-
-    // Representative wavelengths for the physical bins.
+    // Representative wavelength and logarithmic interval width in metres.
     let bins = [
-        (WavelengthBin::Radio as usize, 1.0),
-        (WavelengthBin::Microwave as usize, 1e-2),
-        (WavelengthBin::Infrared as usize, 1e-5),
-        (WavelengthBin::Optical as usize, 5e-7),
-        (WavelengthBin::Ultraviolet as usize, 1e-7),
-        (WavelengthBin::XRay as usize, 1e-10),
-        (WavelengthBin::Gamma as usize, 1e-12),
+        (WavelengthBin::Radio as usize, 1.0, 4.0_f64),
+        (WavelengthBin::Microwave as usize, 1e-2, 4.0),
+        (WavelengthBin::Infrared as usize, 1e-5, 6.0),
+        (WavelengthBin::Optical as usize, 5e-7, 1.4),
+        (WavelengthBin::Ultraviolet as usize, 1e-7, 2.0),
+        (WavelengthBin::XRay as usize, 1e-10, 6.0),
+        (WavelengthBin::Gamma as usize, 1e-12, 4.0),
     ];
-
-    let mut best = WavelengthBin::Infrared as usize;
-    let mut best_ratio = f64::INFINITY;
-    for (idx, lambda) in bins {
-        let ratio = if lambda >= peak {
-            lambda / peak
+    const H: f64 = 6.626_070_15e-34;
+    const C: f64 = 299_792_458.0;
+    const K: f64 = 1.380_649e-23;
+    let mut total = 0.0;
+    for (index, wavelength, log_width) in bins {
+        let exponent = H * C / (wavelength * K * temperature);
+        let value = if exponent > 700.0 {
+            0.0
         } else {
-            peak / lambda
+            (1.0 / wavelength.powi(4)) / exponent.exp_m1() * log_width
         };
-        if ratio < best_ratio {
-            best = idx;
-            best_ratio = ratio;
-        }
+        spectrum.bins[index] = value;
+        total += value;
     }
-
-    spectrum.bins[best] = 1.0;
+    if total > 0.0 {
+        spectrum.scale(1.0 / total);
+    }
     spectrum
 }
 
@@ -359,6 +366,14 @@ mod tests {
         let shadow_point = DVec2::new(earth_position.x + earth_radius + 1e6, 0.0);
         let irrad = field.solar_irradiance(shadow_point);
         assert!(irrad.total() < 1.0);
+    }
+
+    #[test]
+    fn solar_blackbody_spans_optical_and_ultraviolet() {
+        let spectrum = blackbody_spectrum(5778.0);
+        assert!(spectrum.bins[WavelengthBin::Optical as usize] > 0.0);
+        assert!(spectrum.bins[WavelengthBin::Ultraviolet as usize] > 0.0);
+        assert!((spectrum.total() - 1.0).abs() < 1.0e-12);
     }
 
     #[test]

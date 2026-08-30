@@ -85,11 +85,24 @@ This produces the same snapshot format as the SPICE script and covers the Sun,
 planets, major moons, and selected main-belt asteroids. Body masses and
 temperatures are filled from the built-in lookup table.
 
+## Causal Omniband Observation
+
+The prototype can be enabled without changing the legacy default:
+
+```bash
+cargo run --bin marita -- serve --stations 6 --ships 0 \
+  --observer-model causal --history-au 100 --history-budget-mb 512
+```
+
+Passive direct, thermal, reflected optical/UV, and configured natural radio signatures are evaluated from engine-private historical state. Discrete messages, radar, lidar, burns, and transients continue to use expanding `SignalArc`s. Unprivileged Luna/station APIs receive observer-scoped anonymous contacts rather than engine IDs.
+
+Radiative body properties come from the bundled and startup-validated `marita-core/data/body-radiative-profiles.json`. Unknown names use its `default` profile. The causal history is intentionally not serialized into JSON checkpoints; after resume, observations whose retarded emission time predates available history are withheld until the light cone warms up, never replaced with current state.
+
 ## Simulation Checkpoints
 
-The full simulation state (bodies, ships, signals, clock, and next ID) can be
-saved to and loaded from JSON checkpoint files. This is useful for long runs,
-replays, and debugging.
+The full simulation state (bodies, ships, stations, signals, clock, and next ID)
+can be saved to and loaded from JSON checkpoint files. This is useful for long
+runs, replays, and debugging.
 
 ```bash
 # Save a checkpoint after a scenario run
@@ -110,9 +123,34 @@ ignored.
 
 ## gRPC Clients
 
-Any language with Protobuf support can connect to `MaritaEngine`. The primary client contract is:
-- Stream `ShipCommand` at the tick cadence.
+Any language with Protobuf support can connect to `MaritaEngine`. The client contracts are:
+- Stream `ShipCommand` at the tick cadence to control ships.
+- Stream `StationCommand` at the tick cadence to propose station actions.
 - Receive `SimulationTick` at 1 Hz (real time), representing 10 s of simulation time.
+
+Station commands are validated deterministically by the engine; clients do not own authoritative inventory, energy, or production state.
+
+## Local LLM Agent Integration
+
+The `marita-station-agent` crate provides a replaceable LLM adapter. The default MVP adapter connects to a local Ollama instance running Hermes 3 8B:
+
+```bash
+# Install Ollama and pull Hermes 3 8B
+ollama pull hermes3:8b
+ollama serve
+
+# In another terminal, start the engine with stations
+cargo run --bin marita -- serve --stations 6 --ships 0
+
+# Run one independent process per station (repeat with IDs 2000..2005)
+cargo run --bin marita-station-agent -- \
+  --addr http://127.0.0.1:50051 \
+  --station-id 2000 \
+  --ollama-url http://localhost:11434 \
+  --ollama-model hermes3:8b
+```
+
+To run without an LLM endpoint, pass `--no-llm`; a deterministic planner will propose scarcity/surplus actions and respond to physically received WANT/OFFER traffic. Every process is bound to one station and receives no global body, ship, signal, or other-station state.
 
 ## Telemetry / Logging
 

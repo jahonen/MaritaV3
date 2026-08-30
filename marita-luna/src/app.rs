@@ -1,9 +1,10 @@
 //! egui application that renders the Luna station detection view.
 
 use crate::client::spawn_client;
+use crate::track::TrackStore;
 use egui::{Color32, Painter, Pos2, Stroke, Vec2};
-use marita_grpc::proto::Detection;
 use marita_grpc::proto::LunaDetections;
+use std::collections::VecDeque;
 use std::sync::mpsc;
 
 /// Wavelength bin names, matching `marita_core::state::WavelengthBin`.
@@ -20,6 +21,19 @@ const BIN_NAMES: &[&str] = &[
     "Lidar",
 ];
 
+/// A market message observed at Luna, kept for display even after the
+/// originating signal arc has passed.
+#[derive(Clone)]
+struct DisplayMarketMessage {
+    tick: u64,
+    station_name: String,
+    body_name: String,
+    kind: String,
+    material: String,
+    quantity: f64,
+    price: f64,
+}
+
 pub struct LunaApp {
     #[allow(dead_code)]
     _runtime: tokio::runtime::Runtime,
@@ -31,6 +45,10 @@ pub struct LunaApp {
     max_range_m: f64,
     /// If true, use a logarithmic radial scale.
     log_scale: bool,
+    /// Market messages decoded from radio detections at Luna.
+    market_feed: VecDeque<DisplayMarketMessage>,
+    tracks: TrackStore,
+    enabled_bands: [bool; 10],
 }
 
 impl LunaApp {
@@ -46,17 +64,50 @@ impl LunaApp {
             realtime_elapsed: 0.0,
             max_range_m: 1.5e11, // ~1 AU default
             log_scale: false,
+            market_feed: VecDeque::new(),
+            tracks: TrackStore::new(30),
+            enabled_bands: [true; 10],
         }
     }
 
     fn try_recv_state(&mut self) {
         let mut received = false;
         while let Ok(state) = self.state_rx.try_recv() {
-            self.latest = Some(state);
+            self.tracks.update(state.tick, &state.detections);
+            self.latest = Some(state.clone());
+            self.update_market_feed(&state);
             received = true;
         }
         if received {
             self.status = "Connected".into();
+        }
+    }
+
+    fn update_market_feed(&mut self, state: &LunaDetections) {
+        for d in &state.detections {
+            if let Some(msg) = &d.market_payload {
+                let entry = DisplayMarketMessage {
+                    tick: msg.tick,
+                    station_name: msg.station_name.clone(),
+                    body_name: msg.body_name.clone(),
+                    kind: msg.kind.clone(),
+                    material: material_name(msg.material),
+                    quantity: msg.quantity,
+                    price: msg.price_per_unit_kwh,
+                };
+                // Avoid duplicates from repeated signal arrivals.
+                if !self.market_feed.iter().any(|e| {
+                    e.tick == entry.tick
+                        && e.station_name == entry.station_name
+                        && e.material == entry.material
+                }) {
+                    self.market_feed.push_front(entry);
+                }
+            }
+        }
+        // Keep only the most recent 64 messages to avoid unbounded growth.
+        while self.market_feed.len() > 64 {
+            self.market_feed.pop_back();
         }
     }
 }
@@ -103,9 +154,34 @@ impl eframe::App for LunaApp {
                             0.0,
                             color,
                         );
-                        ui.label(*name);
+                        ui.checkbox(&mut self.enabled_bands[idx], *name);
                     });
                 }
+                ui.separator();
+                ui.label(format!("Active tracks: {}", self.tracks.iter().count()));
+            });
+
+        egui::SidePanel::right("market_feed")
+            .default_width(280.0)
+            .show(ctx, |ui| {
+                ui.heading("Public Market Channel");
+                ui.label("Radio broadcasts received at Luna");
+                ui.separator();
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for msg in &self.market_feed {
+                        ui.group(|ui| {
+                            ui.label(format!(
+                                "{} from {} ({})",
+                                msg.kind, msg.station_name, msg.body_name
+                            ));
+                            ui.label(format!(
+                                "{} x {:.1} @ {:.2} kWh/u",
+                                msg.material, msg.quantity, msg.price
+                            ));
+                            ui.label(format!("tick {}", msg.tick));
+                        });
+                    }
+                });
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -117,13 +193,15 @@ impl eframe::App for LunaApp {
             draw_grid(&painter, center, radius, self.max_range_m, self.log_scale);
 
             if let Some(state) = &self.latest {
-                draw_detections(
+                draw_tracks(
                     &painter,
                     center,
                     radius,
                     self.max_range_m,
                     self.log_scale,
-                    &state.detections,
+                    state.tick,
+                    &self.tracks,
+                    &self.enabled_bands,
                 );
             }
         });
@@ -189,34 +267,62 @@ fn draw_grid(painter: &Painter, center: Pos2, radius: f32, max_range_m: f64, log
     );
 }
 
-fn draw_detections(
+fn draw_tracks(
     painter: &Painter,
     center: Pos2,
     radius: f32,
     max_range_m: f64,
     log_scale: bool,
-    detections: &[Detection],
+    tick: u64,
+    tracks: &TrackStore,
+    enabled_bands: &[bool; 10],
 ) {
-    for d in detections {
-        let distance = d.distance;
-        if distance <= 0.0 {
+    for track in tracks.iter() {
+        if track.distance <= 0.0 {
             continue;
         }
+        let Some((band, (strength, _))) = track
+            .bands
+            .iter()
+            .enumerate()
+            .filter(|(band, value)| enabled_bands[*band] && value.is_some())
+            .filter_map(|(band, value)| value.map(|sample| (band, sample)))
+            .max_by(|a, b| {
+                a.1 .0
+                    .partial_cmp(&b.1 .0)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        else {
+            continue;
+        };
         let normalized = if log_scale {
-            (distance.log10() - 1.0) / (max_range_m.log10() - 1.0)
+            (track.distance.log10() - 1.0) / (max_range_m.log10() - 1.0)
         } else {
-            distance / max_range_m
+            track.distance / max_range_m
         }
         .clamp(0.0, 1.0) as f32;
         let r = radius * normalized;
-
-        // Bearing is world radians; screen Y is flipped.
-        let angle = d.bearing as f32;
+        let angle = track.bearing as f32;
         let pos = Pos2::new(center.x + r * angle.cos(), center.y - r * angle.sin());
-
-        let color = bin_color(d.wavelength_bin as usize);
-        let size = 3.0 + (d.strength.log10().max(0.0) as f32).min(6.0);
+        let age = tick.saturating_sub(track.last_tick);
+        let color = if age > 5 {
+            bin_color(band).gamma_multiply(0.45)
+        } else {
+            bin_color(band)
+        };
+        let size = 3.0 + (strength.log10().max(0.0) as f32).min(6.0);
         painter.circle_filled(pos, size, color);
+        painter.text(
+            pos + Vec2::new(size + 2.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            format!(
+                "#{:x} t-{}",
+                track.contact_id,
+                tick.saturating_sub(track.emission_tick)
+            ),
+            egui::FontId::proportional(9.0),
+            color,
+        );
     }
 }
 
@@ -246,4 +352,37 @@ fn format_distance(m: f64) -> String {
     } else {
         format!("{:.0} m", m)
     }
+}
+
+fn material_name(id: u32) -> String {
+    match id {
+        0 => "Regolith",
+        1 => "Iron Ore",
+        2 => "Aluminum Ore",
+        3 => "Titanium Ore",
+        4 => "Water Ice",
+        5 => "Carbonaceous Ore",
+        6 => "Silicate Ore",
+        7 => "Rare Earth Ore",
+        100 => "Iron",
+        101 => "Aluminum",
+        102 => "Titanium",
+        103 => "Water",
+        104 => "Oxygen",
+        105 => "Hydrogen",
+        106 => "Methane",
+        107 => "Glass",
+        200 => "Steel",
+        201 => "Concrete",
+        202 => "Polymer",
+        203 => "Solar Silicon",
+        300 => "Composite",
+        301 => "Semiconductor",
+        302 => "Advanced Alloy",
+        400 => "Habitat Module",
+        401 => "Refinery Module",
+        402 => "Solar Array Module",
+        _ => "Unknown",
+    }
+    .into()
 }

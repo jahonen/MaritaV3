@@ -1,0 +1,20 @@
+[package]
+name = "marita-station-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "marita-station-agent"
+path = "src/main.rs"
+
+[dependencies]
+marita-grpc = { path = "../marita-grpc" }
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "time"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+async-trait = "0.1"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.12", features = ["json"] }
+futures = "0.3"

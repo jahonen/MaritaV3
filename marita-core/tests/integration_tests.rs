@@ -42,8 +42,8 @@ fn simulation_is_deterministic() {
 
     let executor = TickExecutor::new();
     for _ in 0..100 {
-        executor.step(&mut state_a, &[]);
-        executor.step(&mut state_b, &[]);
+        executor.step(&mut state_a, &[], &[]);
+        executor.step(&mut state_b, &[], &[]);
     }
 
     assert_eq!(state_a, state_b, "state should be deterministic");
@@ -74,7 +74,7 @@ fn earth_orbit_period_is_stable() {
     // debug because of unoptimized signal propagation.
     let ticks = 1000;
     for _ in 0..ticks {
-        executor.step(&mut state, &[]);
+        executor.step(&mut state, &[], &[]);
     }
 
     let end = state.bodies[earth_idx].position;
@@ -101,7 +101,7 @@ fn load_test_fifty_bodies_and_one_thousand_ships() {
     let executor = TickExecutor::new();
     let start = std::time::Instant::now();
     for _ in 0..10 {
-        executor.step(&mut state, &[]);
+        executor.step(&mut state, &[], &[]);
     }
     let elapsed = start.elapsed();
 
@@ -154,6 +154,7 @@ fn ship_burn_changes_orbital_energy() {
             noise_floor: 1.0,
             integration_time: 10.0,
             min_snr: 1.0,
+            spectral_response: None,
         }],
         emitters: vec![],
         thermal: ThermalState::new(300.0, 1.0e6, 10.0),
@@ -172,7 +173,7 @@ fn ship_burn_changes_orbital_energy() {
     };
 
     let executor = TickExecutor::new();
-    executor.step(&mut state, &[cmd]);
+    executor.step(&mut state, &[cmd], &[]);
 
     let after_energy = orbital_energy(&state.ships[0], &state.bodies[earth_idx]);
     assert!(
@@ -181,9 +182,120 @@ fn ship_burn_changes_orbital_energy() {
     );
 }
 
+#[test]
+fn causal_luna_observer_sees_delayed_multiband_bodies() {
+    use marita_core::observer::{ObserverConfig, ObserverModel};
+    use marita_core::state::WavelengthBin;
+
+    let mut state = SimulationState::new();
+    state.bodies = CircularOrbitLoader.load();
+    let executor = TickExecutor::new().with_observer_config(ObserverConfig {
+        model: ObserverModel::Causal,
+        ..Default::default()
+    });
+    let mut latest = Vec::new();
+    for _ in 0..70 {
+        latest = executor.step(&mut state, &[], &[]).luna_detections;
+    }
+    assert!(latest
+        .iter()
+        .any(|d| d.wavelength_bin == WavelengthBin::Optical));
+    assert!(latest
+        .iter()
+        .any(|d| d.wavelength_bin == WavelengthBin::Infrared));
+    assert!(latest.iter().all(|d| d.contact_id != 0));
+    assert!(latest.iter().any(|d| d.emission_tick < state.tick));
+}
+
 fn orbital_energy(ship: &Ship, planet: &Body) -> f64 {
     let r = (ship.position - planet.position).length();
     let v2 = ship.velocity.length_squared();
     0.5 * ship.mass() * v2
         - marita_core::units::GRAVITATIONAL_CONSTANT * planet.mass * ship.mass() / r
+}
+
+#[test]
+fn stations_post_market_messages_and_reach_luna() {
+    use marita_core::state::{Body, CollisionResponse, ThermalState};
+    use marita_core::station::{default_station, seed_station_warehouse};
+    use marita_core::units::AU;
+
+    let mut state = SimulationState::new();
+
+    // Minimal Sun-Earth-Moon system with a station on Earth.
+    state.bodies.push(Body {
+        id: 1,
+        name: "Sun".into(),
+        mass: 1.989e30,
+        position: DVec2::ZERO,
+        velocity: DVec2::ZERO,
+        radius: 6.957e8,
+        collision_response: CollisionResponse::Ghost,
+        thermal: ThermalState::new(5778.0, 1.0, 1.0),
+        albedo: Spectrum::zero(),
+    });
+    state.bodies.push(Body {
+        id: 2,
+        name: "Earth".into(),
+        mass: 5.972e24,
+        position: DVec2::new(AU, 0.0),
+        velocity: DVec2::new(0.0, 29_780.0),
+        radius: 6.371e6,
+        collision_response: CollisionResponse::Merge,
+        thermal: ThermalState::new(
+            288.0,
+            1.0e20,
+            4.0 * std::f64::consts::PI * 6.371e6 * 6.371e6,
+        ),
+        albedo: Spectrum::zero(),
+    });
+    state.bodies.push(Body {
+        id: 3,
+        name: "Moon".into(),
+        mass: 7.3477e22,
+        position: DVec2::new(AU, 3.844e8),
+        velocity: DVec2::new(1_022.0, 29_780.0),
+        radius: 1.737e6,
+        collision_response: CollisionResponse::Merge,
+        thermal: ThermalState::new(
+            250.0,
+            1.0e18,
+            4.0 * std::f64::consts::PI * 1.737e6 * 1.737e6,
+        ),
+        albedo: Spectrum::zero(),
+    });
+
+    let mut station = default_station(100, "Earth Station", 2, DVec2::new(6.371e6 + 1e3, 0.0));
+    seed_station_warehouse(&mut station, "Earth");
+    station.solar_collector_area = 1.0e6;
+    station.panel_efficiency = 0.25;
+    state.stations.push(station);
+
+    let executor = TickExecutor::new();
+    // Run enough ticks for auto posters to be generated and for the radio
+    // wavefront to reach Luna.
+    let mut luna_saw_market = false;
+    for _ in 0..120 {
+        let output = executor.step(&mut state, &[], &[]);
+        for d in output.luna_detections {
+            if d.market_payload.is_some() {
+                luna_saw_market = true;
+            }
+        }
+        if luna_saw_market {
+            break;
+        }
+    }
+
+    assert!(
+        luna_saw_market,
+        "Luna should detect at least one market broadcast from the Earth station"
+    );
+    assert!(
+        state
+            .stations
+            .iter()
+            .any(|s| !s.active_market_posters.is_empty()),
+        "station should have active market posters"
+    );
 }

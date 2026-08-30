@@ -4,7 +4,10 @@ package marita;
 
 service MaritaEngine {
   rpc StreamCommands(stream ShipCommand) returns (stream SimulationTick);
+  rpc StreamStationCommands(stream StationCommand) returns (stream SimulationTick);
   rpc GetState(GetStateRequest) returns (SimulationState);
+  rpc GetStationView(StationViewRequest) returns (StationView);
+  rpc SubmitStationCommand(StationCommand) returns (CommandResult);
   rpc StreamLunaView(LunaViewRequest) returns (stream LunaDetections);
 }
 
@@ -80,6 +83,99 @@ message Detection {
   double distance = 4;
   double strength = 5;
   double snr = 6;
+  optional MarketMessage market_payload = 7;
+  uint64 contact_id = 8;
+  double bearing_sigma = 9;
+  double range_sigma = 10;
+  uint64 emission_tick = 11;
+}
+
+message MarketMessage {
+  uint64 message_id = 1;
+  uint64 station_id = 2;
+  string station_name = 3;
+  string body_name = 4;
+  uint64 tick = 5;
+  string kind = 6;
+  uint32 material = 7;
+  double quantity = 8;
+  double price_per_unit_kwh = 9;
+  uint64 ttl_ticks = 10;
+  optional uint64 in_reply_to = 11;
+  optional uint64 to_station_id = 12;
+}
+
+message ProductionLine {
+  uint32 reaction = 1;
+  uint64 progress_ticks = 2;
+  bool active = 3;
+}
+
+message MarketPoster {
+  MarketMessage message = 1;
+  uint64 remaining_ticks = 2;
+}
+
+message WarehouseEntry {
+  uint32 material = 1;
+  double quantity = 2;
+}
+
+message Station {
+  uint64 id = 1;
+  string name = 2;
+  uint64 parent_body_id = 3;
+  Vec2 position = 4;
+  double solar_collector_area = 5;
+  double panel_efficiency = 6;
+  repeated WarehouseEntry warehouses = 7;
+  repeated ProductionLine production_lines = 8;
+  repeated MarketPoster active_market_posters = 9;
+  uint32 tech_tier = 10;
+  repeated WarehouseEntry modules = 11;
+  repeated Emitter emitters = 12;
+  double trade_credits_kwh = 13;
+  repeated WarehouseEntry reserved_warehouses = 14;
+}
+
+message TradeContract {
+  uint64 id = 1;
+  uint64 buyer_station_id = 2;
+  uint64 seller_station_id = 3;
+  uint32 material = 4;
+  double quantity = 5;
+  double price_per_unit_kwh = 6;
+  double escrow_kwh = 7;
+  uint64 created_tick = 8;
+  uint64 arrival_tick = 9;
+  string status = 10;
+}
+
+message StationViewRequest { uint64 station_id = 1; }
+message StationView {
+  uint64 tick = 1;
+  double sim_time = 2;
+  Station station = 3;
+  repeated Detection received_messages = 4;
+  repeated TradeContract contracts = 5;
+}
+message CommandResult { bool accepted = 1; string reason = 2; }
+
+message StationCommand {
+  uint64 station_id = 1;
+  oneof action {
+    MarketMessage post_market_message = 2;
+    StartProduction start_production = 3;
+    SetCollectorArea set_collector_area = 4;
+  }
+}
+
+message StartProduction {
+  uint32 reaction = 1;
+}
+
+message SetCollectorArea {
+  double area_m2 = 1;
 }
 
 message SimulationTick {
@@ -90,6 +186,13 @@ message SimulationTick {
   repeated SignalArc signals = 5;
   repeated ShipDetections ship_detections = 6;
   repeated Detection luna_detections = 7;
+  repeated Station stations = 8;
+  repeated StationDetections station_detections = 9;
+}
+
+message StationDetections {
+  uint64 station_id = 1;
+  repeated Detection detections = 2;
 }
 
 message LunaViewRequest {}
@@ -111,4 +214,5 @@ message SimulationState {
   repeated Body bodies = 3;
   repeated Ship ships = 4;
   repeated SignalArc signals = 5;
+  repeated Station stations = 6;
 }

@@ -432,19 +432,24 @@ fn rotate_vector(v: DVec2, angle: f64) -> DVec2 {
 pub fn cull_signals_past_sensors(
     signals: Vec<SignalArc>,
     ships: &[Ship],
+    stations: &[crate::state::Station],
+    bodies: &[crate::state::Body],
     boundary: f64,
 ) -> Vec<SignalArc> {
-    if ships.is_empty() {
+    let mut positions: Vec<glam::DVec2> = ships.iter().map(|s| s.position).collect();
+    positions.extend(stations.iter().map(|s| s.position(bodies)));
+
+    if positions.is_empty() {
         return Vec::new();
     }
 
     signals
         .into_iter()
-        .filter(|arc| can_reach_sensor(arc, ships, boundary))
+        .filter(|arc| can_reach_sensor(arc, &positions, boundary))
         .collect()
 }
 
-fn can_reach_sensor(arc: &SignalArc, ships: &[Ship], boundary: f64) -> bool {
+fn can_reach_sensor(arc: &SignalArc, positions: &[glam::DVec2], boundary: f64) -> bool {
     // Engine plumes are short-lived and visually/tactically important; keep
     // them even when no other sensor is directly in the plume path.
     if arc.spectrum.bins[WavelengthBin::EngineThermal as usize] > 0.0 {
@@ -471,18 +476,17 @@ fn can_reach_sensor(arc: &SignalArc, ships: &[Ship], boundary: f64) -> bool {
     let half_width = arc.angular_width / 2.0;
     let arc_dir = crate::state::heading_vector(arc.direction);
 
-    for ship in ships {
-        let delta = ship.position - arc.origin;
+    for pos in positions {
+        let delta = *pos - arc.origin;
         let dist = delta.length();
         if dist > max_range {
             continue;
         }
 
-        // Check angular containment: the ship must lie within the arc's sector.
+        // Check angular containment: the receiver must lie within the arc's sector.
         let cos_half = half_width.cos();
         let cos_angle = (delta.dot(arc_dir) / dist.max(1e-12)).clamp(-1.0, 1.0);
         if cos_angle >= cos_half {
-            // The ship is somewhere in front of the arc and within reach.
             return true;
         }
     }

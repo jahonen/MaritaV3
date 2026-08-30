@@ -4,7 +4,7 @@
 //! A fallback `CircularOrbitLoader` is provided so the engine can run without
 //! SPICE dependencies during development and testing.
 
-use crate::state::{Body, CollisionResponse, Spectrum, ThermalState};
+use crate::state::{Body, CollisionResponse, ThermalState};
 use crate::units::{AU, SOLAR_MASS, SOLAR_RADIUS, SUN_EFFECTIVE_TEMPERATURE};
 use glam::DVec2;
 use serde::Deserialize;
@@ -210,10 +210,11 @@ impl EphemerisLoader for CircularOrbitLoader {
             (3, "Venus", 4.8675e24, 6.0518e6, 0.723),
             (4, "Earth", 5.9723e24, 6.371e6, 1.0),
             (5, "Mars", 6.4171e23, 3.3895e6, 1.524),
-            (6, "Jupiter", 1.8982e27, 6.9911e7, 5.204),
-            (7, "Saturn", 5.6834e26, 5.8232e7, 9.582),
-            (8, "Uranus", 8.6810e25, 2.5362e7, 19.20),
-            (9, "Neptune", 1.02413e26, 2.4622e7, 30.05),
+            (6, "Ceres", 9.3835e20, 4.69e5, 2.77),
+            (7, "Jupiter", 1.8982e27, 6.9911e7, 5.204),
+            (8, "Saturn", 5.6834e26, 5.8232e7, 9.582),
+            (9, "Uranus", 8.6810e25, 2.5362e7, 19.20),
+            (10, "Neptune", 1.02413e26, 2.4622e7, 30.05),
         ];
 
         for (id, name, mass, radius, a) in planets {
@@ -231,6 +232,20 @@ impl EphemerisLoader for CircularOrbitLoader {
             ));
         }
 
+        // Earth's Moon: placed in a circular orbit around Earth.  Start it
+        // 90 degrees away from the Earth-Sun line so it is not in Earth's shadow.
+        if let Some(earth) = bodies.iter().find(|b| b.name == "Earth") {
+            let moon_distance = 3.844e8; // m
+            let moon_v = (crate::units::GRAVITATIONAL_CONSTANT * earth.mass / moon_distance).sqrt();
+            // Moon starts above Earth (+Y); velocity is then +X for a
+            // counter-clockwise orbit around Earth as seen from the Sun.
+            let moon_pos = earth.position + DVec2::new(0.0, moon_distance);
+            let moon_vel = earth.velocity + DVec2::new(moon_v, 0.0);
+            bodies.push(make_body(
+                11, "Moon", 7.3477e22, 1.737e6, moon_pos, moon_vel, 0.0,
+            ));
+        }
+
         bodies
     }
 }
@@ -242,11 +257,16 @@ fn make_body(
     radius: f64,
     position: DVec2,
     velocity: DVec2,
-    temperature: f64,
+    _temperature: f64,
 ) -> Body {
-    let mut albedo = Spectrum::zero();
-    // Optical albedo is non-zero for most bodies.
-    albedo.bins[crate::state::WavelengthBin::Optical as usize] = 0.3;
+    let profile = crate::radiative_profile::bundled_catalog().get(name);
+    let mut thermal = ThermalState::new(
+        profile.temperature_k,
+        mass * 1000.0,
+        4.0 * std::f64::consts::PI * radius * radius,
+    );
+    thermal.emissivity = profile.emissivity;
+    thermal.internal_generation = profile.internal_generation_w;
 
     Body {
         id,
@@ -256,12 +276,8 @@ fn make_body(
         velocity,
         radius,
         collision_response: CollisionResponse::Merge,
-        thermal: ThermalState::new(
-            temperature,
-            mass * 1000.0,
-            4.0 * std::f64::consts::PI * radius * radius,
-        ),
-        albedo,
+        thermal,
+        albedo: profile.albedo_spectrum(),
     }
 }
 
@@ -275,6 +291,16 @@ mod tests {
         let bodies = loader.load();
         assert!(bodies.iter().any(|b| b.name == "Sun"));
         assert!(bodies.iter().any(|b| b.name == "Earth"));
+    }
+
+    #[test]
+    fn circular_bodies_use_radiative_profiles() {
+        let bodies = CircularOrbitLoader.load();
+        let earth = bodies.iter().find(|body| body.name == "Earth").unwrap();
+        let jupiter = bodies.iter().find(|body| body.name == "Jupiter").unwrap();
+        assert_eq!(earth.thermal.temperature, 288.0);
+        assert!(earth.albedo.bins[crate::state::WavelengthBin::Optical as usize] > 0.0);
+        assert!(jupiter.thermal.internal_generation > 0.0);
     }
 
     #[test]

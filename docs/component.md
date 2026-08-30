@@ -96,13 +96,78 @@ This document lists every modular unit of functionality in the MaritaV3 space si
 - **Lifecycle:** alpha
 
 ### `AmbientField`
-- **Purpose:** Continuous radiation field for sunlight and thermal emission. Replaces expanding-arc emitters for the Sun and warm bodies, eliminating the ambient signal explosion while preserving heating and sensor background.
+- **Purpose:** Legacy continuous radiation field and current-local heating input. It remains available while the causal observer prototype is evaluated.
 - **Inputs:** Current `Body` and `Ship` slices.
-- **Outputs:** Irradiance spectra at points, absorbed energy for entities, and ambient source lists for sensors.
+- **Outputs:** Current-time irradiance and absorbed energy; legacy sensor sources when selected.
+- **Side effects:** None.
+- **Lifecycle:** deprecated
+
+### `RadiativeProfileCatalog`
+- **Purpose:** Validates the bundled JSON catalog of temperatures, emissivity, per-band albedo, internal heat, and natural omniband luminosity.
+- **Inputs:** Embedded `body-radiative-profiles.json` and body name.
+- **Outputs:** A validated body profile or conservative default profile.
+- **Side effects:** Initializes body thermal and radiative properties during ephemeris loading.
+- **Lifecycle:** alpha
+
+### `ObservationHistory`
+- **Purpose:** Engine-private bounded state history supporting strict retarded-time observations over up to 100 AU.
+- **Inputs:** Finalized body, ship, and station state once per tick plus range/memory configuration.
+- **Outputs:** Interpolated historical observation samples.
+- **Side effects:** Retains a memory-bounded ring; history is intentionally omitted from JSON checkpoints and warms after resume.
+- **Lifecycle:** alpha
+
+### `PassiveRadiationObserver`
+- **Purpose:** Backward-evaluates direct Planck-spectrum thermal/natural emission and one-bounce Lambertian sunlight using historical source, reflector, and occluder state.
+- **Inputs:** Observer pose/time, sensors, body catalog, observation history, active arcs, and candidate cap.
+- **Outputs:** Causally delayed per-band detections.
+- **Side effects:** None; missing history suppresses a detection rather than substituting current state.
+- **Lifecycle:** alpha
+
+### `AnonymousContact`
+- **Purpose:** Converts private source associations into observer-scoped contact handles with deterministic per-window bearing/range error.
+- **Inputs:** Private source key, observer scope, integration window, and sensor resolution.
+- **Outputs:** Stable anonymous contact ID, uncertain measurements, and emission tick.
 - **Side effects:** None.
 - **Lifecycle:** alpha
 
-## Admin Viewer Components
+## Station Economy Components
+
+### `Station`
+- **Purpose:** Industrial site anchored to a celestial body or to an L4/L5 Lagrange point of a two-body system. Owns solar collectors, warehouses, production lines, market posters, trade credits, and reserved inventory.
+- **Inputs:** Initial parent body, surface offset (or Lagrange point), tech tier, seed composition; `StationCommand` messages.
+- **Outputs:** Processed materials, market broadcast arcs, updated warehouse balances.
+- **Side effects:** Adds `SignalArc` market payloads to the simulation when posters are active; recomputes Lagrange offsets each tick.
+- **Lifecycle:** alpha
+
+### `TradeContract`
+- **Purpose:** Authoritative Phase 1 agreement and cargo-delay record formed from an accepted directed offer.
+- **Inputs:** Valid OFFER/COUNTER and ACCEPT message chain, seller inventory, buyer credits, station distance.
+- **Outputs:** Contract status and arrival tick exposed only to the two counterparties.
+- **Side effects:** Reserves seller inventory, escrows buyer credits, then transfers goods and credits atomically after deterministic transit.
+- **Lifecycle:** alpha
+
+### `MaterialLibrary`
+- **Purpose:** Defines materials across four complexity tiers and their base values. Provides body-specific surface-composition tables used to seed station inventories.
+- **Inputs:** Material/reaction identifiers.
+- **Outputs:** Static `MaterialInfo`, `Reaction` definitions, default body composition maps.
+- **Side effects:** None.
+- **Lifecycle:** alpha
+
+### `SynthesisPlanner` (deterministic tools)
+- **Purpose:** Validates LLM proposals and converts them into engine-safe `StationCommand`s. Enforces known material/reaction IDs and non-negative quantities.
+- **Inputs:** A `ProposedAction` from an LLM adapter.
+- **Outputs:** An optional `StationCommand` for the engine.
+- **Side effects:** None.
+- **Lifecycle:** alpha
+
+### `StationEconomy`
+- **Purpose:** Runs station bookkeeping each tick: solar collection, production-line progress, market-poster expiry, and automatic WANT/HAVE generation when no AI agent is connected.
+- **Inputs:** Current `SimulationState` and `StationCommand`s.
+- **Outputs:** Updated station warehouses and active market posters; new market-broadcast `SignalArc`s.
+- **Side effects:** Modifies station state; emits broadcast arcs.
+- **Lifecycle:** alpha
+
+## Admin/Observer Viewer Components
 
 ### `AdminApp`
 - **Purpose:** Local egui/eframe gods-eye visualization of a running engine.
@@ -117,3 +182,10 @@ This document lists every modular unit of functionality in the MaritaV3 space si
 - **Outputs:** Screen positions and visible sizes that handle AU-to-meter scale ranges.
 - **Side effects:** None.
 - **Lifecycle:** alpha
+
+### `LunaApp`
+- **Purpose:** Observer client showing Luna's infosphere without absolute remote state. Maintains anonymous tracks, band filters, retarded-age labels, and decoded Radio market traffic.
+- **Inputs:** `StreamLunaView` gRPC detections with anonymous contact and uncertainty fields.
+- **Outputs:** Persistent polar track plot and scrolling public market-channel panel.
+- **Side effects:** Network connection to gRPC server; GUI rendering.
+- **Lifecycle:** beta

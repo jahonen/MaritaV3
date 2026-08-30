@@ -3,7 +3,9 @@
 //! All spatial quantities are stored in SI units (meters, seconds, radians)
 //! using `glam::DVec2` for 2D vectors.
 
+use crate::material::{MaterialId, ReactionId};
 use glam::DVec2;
+use std::collections::HashMap;
 
 /// Number of wavelength bins in a `Spectrum`.
 pub const SPECTRUM_BINS: usize = 10;
@@ -113,6 +115,10 @@ pub enum CollisionResponse {
     Bounce { restitution: f64 },
 }
 
+fn default_trade_credits() -> f64 {
+    100_000.0
+}
+
 /// A celestial body (point mass for physics, with radius for collisions/sensors).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Body {
@@ -143,6 +149,27 @@ pub struct EngineMount {
     pub gimbal: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SensorSpectralResponse {
+    pub noise_floor: [f64; SPECTRUM_BINS],
+    pub efficiency: [f64; SPECTRUM_BINS],
+    pub angular_resolution: f64,
+    pub range_resolution_fraction: f64,
+    pub noise_seed: u64,
+}
+
+impl Default for SensorSpectralResponse {
+    fn default() -> Self {
+        Self {
+            noise_floor: [1.0; SPECTRUM_BINS],
+            efficiency: [1.0; SPECTRUM_BINS],
+            angular_resolution: 1.0e-3,
+            range_resolution_fraction: 1.0e-3,
+            noise_seed: 0,
+        }
+    }
+}
+
 /// A sensor array on a ship.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SensorArray {
@@ -161,6 +188,8 @@ pub struct SensorArray {
     pub integration_time: f64,
     /// Minimum SNR required for a detection.
     pub min_snr: f64,
+    #[serde(default)]
+    pub spectral_response: Option<SensorSpectralResponse>,
 }
 
 /// An intentional signal emitter on a ship.
@@ -199,6 +228,160 @@ impl Default for ShipCommand {
             gimbal: 0.0,
             emitter_states: Vec::new(),
         }
+    }
+}
+
+/// A market message broadcast by a station.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MarketMessage {
+    pub message_id: u64,
+    pub station_id: u64,
+    pub station_name: String,
+    pub body_name: String,
+    pub tick: u64,
+    pub kind: MarketMessageKind,
+    pub material: MaterialId,
+    pub quantity: f64,
+    /// Price in kWh-equivalent per unit.
+    pub price_per_unit_kwh: f64,
+    /// How many simulated ticks the offer remains open.
+    pub ttl_ticks: u64,
+    /// Message being answered, if this is part of a negotiation.
+    pub in_reply_to: Option<u64>,
+    /// Intended recipient. `None` means a public broadcast.
+    pub to_station_id: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum MarketMessageKind {
+    Want,
+    Have,
+    Offer,
+    Counter,
+    Accept,
+    Reject,
+}
+
+/// A station command controlling a station's high-level behaviour.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum StationCommand {
+    /// Broadcast a market poster.
+    PostMarketMessage(MarketMessage),
+    /// Start or queue a production reaction.
+    StartProduction {
+        station_id: u64,
+        reaction: ReactionId,
+    },
+    /// Expand the solar collector area.
+    SetCollectorArea { station_id: u64, area_m2: f64 },
+}
+
+/// An ongoing production batch at a station.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ProductionLine {
+    pub reaction: ReactionId,
+    pub progress_ticks: u64,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ContractStatus {
+    InTransit,
+    Settled,
+    Failed,
+}
+
+/// Engine-owned agreement formed by accepting an offer.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TradeContract {
+    pub id: u64,
+    pub buyer_station_id: u64,
+    pub seller_station_id: u64,
+    pub material: MaterialId,
+    pub quantity: f64,
+    pub price_per_unit_kwh: f64,
+    pub escrow_kwh: f64,
+    pub created_tick: u64,
+    pub arrival_tick: u64,
+    pub status: ContractStatus,
+}
+
+/// A market poster currently being broadcast by a station.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MarketPoster {
+    pub message: MarketMessage,
+    pub remaining_ticks: u64,
+    /// Whether this poster has already been sent as a radio broadcast. Used to
+    /// avoid emitting a continuous stream of arcs for the same message.
+    #[serde(default)]
+    pub broadcasted: bool,
+}
+
+/// Lagrange point of a two-body system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum LagrangePoint {
+    /// 60° ahead of the secondary in its orbit around the primary.
+    L4,
+    /// 60° behind the secondary in its orbit around the primary.
+    L5,
+}
+
+/// A fixed celestial station anchored to a body surface or orbital site.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Station {
+    pub id: u64,
+    pub name: String,
+    /// The celestial body this station is anchored to.
+    pub parent_body_id: u64,
+    /// Surface offset from the body centre, in metres.
+    pub surface_offset: DVec2,
+    /// If set, `surface_offset` is recomputed each tick to keep the station at
+    /// the given Lagrange point of the `parent_body_id`--`secondary_body_id`
+    /// system.
+    pub lagrange_point: Option<(u64, LagrangePoint)>,
+    /// Solar collector area in m².
+    pub solar_collector_area: f64,
+    /// Panel conversion efficiency in [0, 1].
+    pub panel_efficiency: f64,
+    /// Stored material inventory (units).
+    pub warehouses: HashMap<MaterialId, f64>,
+    /// Transferable energy-credit balance used for trade settlement.
+    #[serde(default = "default_trade_credits")]
+    pub trade_credits_kwh: f64,
+    /// Inventory reserved in active contracts.
+    #[serde(default)]
+    pub reserved_warehouses: HashMap<MaterialId, f64>,
+    /// Active production batches.
+    pub production_lines: Vec<ProductionLine>,
+    /// Currently broadcast market posters.
+    pub active_market_posters: Vec<MarketPoster>,
+    /// Maximum technology/complexity tier this station can run.
+    pub tech_tier: u32,
+    /// Stored completed station modules.
+    pub modules: HashMap<MaterialId, f64>,
+    /// Intentional emitter used for market broadcasts.
+    pub emitters: Vec<Emitter>,
+    /// Receivers used to read other stations' broadcasts.
+    pub sensor_arrays: Vec<SensorArray>,
+    pub thermal: ThermalState,
+    pub albedo: Spectrum,
+}
+
+impl Station {
+    /// World-space position of the station at the current instant.
+    pub fn position(&self, bodies: &[Body]) -> DVec2 {
+        if let Some(body) = bodies.iter().find(|b| b.id == self.parent_body_id) {
+            body.position + self.surface_offset
+        } else {
+            self.surface_offset
+        }
+    }
+
+    pub fn radius(&self) -> f64 {
+        // Approximate from collector area; at least 10 m.
+        (self.solar_collector_area / std::f64::consts::PI)
+            .sqrt()
+            .max(10.0)
     }
 }
 
@@ -270,6 +453,7 @@ pub fn default_ship(id: u64, name: &str, position: DVec2, velocity: DVec2) -> Sh
             noise_floor: 1.0,
             integration_time: 1.0,
             min_snr: 1.0,
+            spectral_response: None,
         }],
         emitters: vec![],
         thermal: ThermalState::new(300.0, 1.0e6, 10.0),
@@ -300,6 +484,8 @@ pub struct SignalArc {
     pub source_id: Option<u64>,
     /// Reflection generation depth.
     pub generation: u32,
+    /// Optional market message carried on this broadcast arc.
+    pub market_payload: Option<MarketMessage>,
 }
 
 impl SignalArc {
@@ -322,6 +508,7 @@ impl SignalArc {
             degradation_rates: Spectrum::zero(),
             source_id: None,
             generation: 0,
+            market_payload: None,
         }
     }
 
@@ -335,12 +522,30 @@ impl SignalArc {
 /// The complete world state at one tick.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SimulationState {
+    #[serde(default = "current_schema_version")]
+    pub schema_version: u32,
     pub tick: u64,
     pub sim_time: f64,
     pub bodies: Vec<Body>,
     pub ships: Vec<Ship>,
+    #[serde(default)]
+    pub stations: Vec<Station>,
     pub signals: Vec<SignalArc>,
+    #[serde(default)]
+    pub contracts: Vec<TradeContract>,
+    /// Authoritative sent-message registry used to validate negotiations.
+    #[serde(default)]
+    pub market_messages: HashMap<u64, MarketMessage>,
     pub next_id: u64,
+    #[serde(default = "default_next_id")]
+    pub next_market_message_id: u64,
+}
+
+fn current_schema_version() -> u32 {
+    2
+}
+fn default_next_id() -> u64 {
+    1
 }
 
 impl Default for SimulationState {
@@ -352,18 +557,29 @@ impl Default for SimulationState {
 impl SimulationState {
     pub fn new() -> Self {
         Self {
+            schema_version: current_schema_version(),
             tick: 0,
             sim_time: 0.0,
             bodies: Vec::new(),
             ships: Vec::new(),
+            stations: Vec::new(),
             signals: Vec::new(),
+            contracts: Vec::new(),
+            market_messages: HashMap::new(),
             next_id: 1,
+            next_market_message_id: 1,
         }
     }
 
     pub fn alloc_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
+        id
+    }
+
+    pub fn alloc_market_message_id(&mut self) -> u64 {
+        let id = self.next_market_message_id;
+        self.next_market_message_id += 1;
         id
     }
 
@@ -436,6 +652,23 @@ mod tests {
     }
 
     #[test]
+    fn legacy_checkpoint_fields_default_safely() {
+        let state = SimulationState::new();
+        let mut value = serde_json::to_value(state).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("schema_version");
+        object.remove("stations");
+        object.remove("contracts");
+        object.remove("market_messages");
+        object.remove("next_market_message_id");
+        let loaded: SimulationState = serde_json::from_value(value).unwrap();
+        assert_eq!(loaded.schema_version, current_schema_version());
+        assert!(loaded.stations.is_empty());
+        assert!(loaded.contracts.is_empty());
+        assert_eq!(loaded.next_market_message_id, 1);
+    }
+
+    #[test]
     fn checkpoint_roundtrip() {
         let mut state = SimulationState::new();
         state.tick = 42;
@@ -445,7 +678,9 @@ mod tests {
         assert_eq!(loaded.tick, state.tick);
         assert_eq!(loaded.bodies, state.bodies);
         assert_eq!(loaded.ships, state.ships);
+        assert_eq!(loaded.stations, state.stations);
         assert_eq!(loaded.signals, state.signals);
         assert_eq!(loaded.next_id, state.next_id);
+        assert_eq!(loaded.next_market_message_id, state.next_market_message_id);
     }
 }

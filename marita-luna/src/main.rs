@@ -6,6 +6,7 @@
 
 mod app;
 mod client;
+mod track;
 
 use app::LunaApp;
 

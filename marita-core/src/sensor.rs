@@ -8,14 +8,18 @@
 use crate::ambient::AmbientField;
 use crate::spatial_tree::{Aabb, Quadtree};
 use crate::state::{
-    normalize_angle, Body, SensorArray, Ship, SignalArc, WavelengthBin, SPECTRUM_BINS,
+    normalize_angle, Body, MarketMessage, SensorArray, Ship, SignalArc, WavelengthBin,
+    SPECTRUM_BINS,
 };
 use glam::DVec2;
 
 /// A detection reported by a sensor array.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Detection {
+    /// Private authoritative source ID; stripped from unprivileged APIs.
     pub source_id: Option<u64>,
+    /// Observer-scoped anonymous contact handle.
+    pub contact_id: u64,
     pub wavelength_bin: WavelengthBin,
     /// Bearing to the source in world radians.
     pub bearing: f64,
@@ -25,6 +29,31 @@ pub struct Detection {
     pub strength: f64,
     /// Signal-to-noise ratio used for detection.
     pub snr: f64,
+    pub bearing_sigma: f64,
+    pub range_sigma: f64,
+    pub emission_tick: u64,
+    /// Decoded market message, if this detection carried one on the Radio band.
+    pub market_payload: Option<MarketMessage>,
+}
+
+pub fn luna_sensor() -> SensorArray {
+    let response = crate::state::SensorSpectralResponse {
+        noise_floor: [
+            1.0e-20, 1.0e-18, 1.0e-8, 1.0e-8, 1.0e-10, 1.0e-12, 1.0e-14, 1.0e-8, 1.0e-12, 1.0e-12,
+        ],
+        ..Default::default()
+    };
+    SensorArray {
+        local_position: DVec2::ZERO,
+        bearing: 0.0,
+        field_of_view: 2.0 * std::f64::consts::PI,
+        bands: [true; SPECTRUM_BINS],
+        aperture_area: 1.0,
+        noise_floor: 1.0,
+        integration_time: 1.0,
+        min_snr: 0.001,
+        spectral_response: Some(response),
+    }
 }
 
 /// Compute all detections for all ships.
@@ -52,18 +81,206 @@ pub fn compute_luna_detections(
         .collect();
     let signal_tree = Quadtree::build(&signal_items, 16, 20);
 
-    let sensors = vec![SensorArray {
-        local_position: DVec2::ZERO,
-        bearing: 0.0,
-        field_of_view: 2.0 * std::f64::consts::PI,
-        bands: [true; SPECTRUM_BINS],
-        aperture_area: 1.0,
-        noise_floor: 1.0,
-        integration_time: 1.0,
-        min_snr: 1.0,
-    }];
+    let sensors = [luna_sensor()];
 
     compute_observer_detections(luna.position, 0.0, &sensors, signals, &signal_tree, &field)
+}
+
+/// Compute physically received detections independently for each station.
+pub fn compute_station_detections(
+    bodies: &[Body],
+    ships: &[Ship],
+    stations: &[crate::state::Station],
+    signals: &[SignalArc],
+) -> std::collections::HashMap<u64, Vec<Detection>> {
+    let field = AmbientField::new(bodies, ships);
+    let signal_items: Vec<_> = signals
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (i, Aabb::from_circle(s.origin, s.outer_radius)))
+        .collect();
+    let signal_tree = Quadtree::build(&signal_items, 16, 20);
+    stations
+        .iter()
+        .map(|station| {
+            let detections = compute_observer_detections(
+                station.position(bodies),
+                0.0,
+                &station.sensor_arrays,
+                signals,
+                &signal_tree,
+                &field,
+            );
+            (station.id, detections)
+        })
+        .collect()
+}
+
+pub fn compute_causal_observer_detections(
+    observer_id: u64,
+    observer_pos: DVec2,
+    observer_orientation: f64,
+    sensors: &[SensorArray],
+    signals: &[SignalArc],
+    history: &crate::history::ObservationHistory,
+    bodies: &[Body],
+    ships: &[Ship],
+    stations: &[crate::state::Station],
+    observer_body_id: Option<u64>,
+    observation_time: f64,
+    candidate_cap: usize,
+) -> Vec<Detection> {
+    if sensors.is_empty() {
+        return Vec::new();
+    }
+    let signal_items: Vec<_> = signals
+        .iter()
+        .enumerate()
+        .map(|(i, signal)| (i, Aabb::from_circle(signal.origin, signal.outer_radius)))
+        .collect();
+    let signal_tree = Quadtree::build(&signal_items, 16, 20);
+    let mut detections = compute_observer_detections(
+        observer_pos,
+        observer_orientation,
+        sensors,
+        signals,
+        &signal_tree,
+        &AmbientField::empty(),
+    );
+    let window = (observation_time
+        / sensors
+            .first()
+            .map(|s| s.integration_time)
+            .unwrap_or(1.0)
+            .max(1.0)) as u64;
+    let observer_noise_id = observer_id
+        ^ sensors
+            .first()
+            .and_then(|s| s.spectral_response)
+            .map(|r| r.noise_seed)
+            .unwrap_or(0);
+    for detection in &mut detections {
+        detection.contact_id = anonymous_contact_id(observer_id, detection.source_id.unwrap_or(0));
+        detection.emission_tick =
+            (observation_time - detection.distance / crate::units::SPEED_OF_LIGHT).max(0.0) as u64
+                / crate::units::TICK_SIM_TIME as u64;
+        apply_measurement_noise(detection, observer_noise_id, window);
+    }
+    let contributions = crate::passive_radiation::observe_bodies(
+        history,
+        bodies,
+        ships,
+        stations,
+        observer_pos,
+        observer_body_id,
+        observation_time,
+        candidate_cap,
+    );
+    for sensor in sensors {
+        let sensor_bearing = normalize_angle(observer_orientation + sensor.bearing);
+        let half_fov = sensor.field_of_view / 2.0;
+        for contribution in &contributions {
+            let raw_diff = (contribution.bearing - sensor_bearing).abs();
+            let bearing_diff = raw_diff.min(2.0 * std::f64::consts::PI - raw_diff);
+            if bearing_diff > half_fov {
+                continue;
+            }
+            for i in 0..SPECTRUM_BINS {
+                if !sensor.bands[i] {
+                    continue;
+                }
+                let response = sensor.spectral_response.unwrap_or_default();
+                let power = contribution.spectrum.bins[i]
+                    * sensor.aperture_area
+                    * sensor.integration_time
+                    * response.efficiency[i];
+                if power <= 0.0 {
+                    continue;
+                }
+                let angular_resolution = response.angular_resolution;
+                let local_jamming: f64 = contributions
+                    .iter()
+                    .filter(|other| other.source != contribution.source)
+                    .filter(|other| {
+                        let delta = (other.bearing - contribution.bearing).abs();
+                        delta.min(2.0 * std::f64::consts::PI - delta) <= angular_resolution
+                    })
+                    .map(|other| {
+                        other.spectrum.bins[i]
+                            * sensor.aperture_area
+                            * sensor.integration_time
+                            * response.efficiency[i]
+                    })
+                    .sum();
+                let noise = response.noise_floor[i] + local_jamming;
+                let snr = power / noise.max(f64::MIN_POSITIVE);
+                if snr >= sensor.min_snr {
+                    let mut detection = Detection {
+                        source_id: Some(contribution.source.id),
+                        contact_id: anonymous_contact_id(observer_id, contribution.source.id),
+                        wavelength_bin: wavelength_bin(i),
+                        bearing: contribution.bearing,
+                        distance: contribution.distance,
+                        strength: power,
+                        snr,
+                        bearing_sigma: response.angular_resolution,
+                        range_sigma: contribution.distance * response.range_resolution_fraction,
+                        emission_tick: (contribution.emission_time.max(0.0)
+                            / crate::units::TICK_SIM_TIME)
+                            as u64,
+                        market_payload: None,
+                    };
+                    apply_measurement_noise(&mut detection, observer_id, window);
+                    detections.push(detection);
+                }
+            }
+        }
+    }
+    detections
+}
+
+fn anonymous_contact_id(observer_id: u64, source_id: u64) -> u64 {
+    mix64(observer_id ^ source_id.rotate_left(29) ^ 0x9e3779b97f4a7c15)
+}
+
+fn apply_measurement_noise(detection: &mut Detection, observer_id: u64, window: u64) {
+    let seed = observer_id
+        ^ detection.source_id.unwrap_or(0).rotate_left(17)
+        ^ (detection.wavelength_bin as u64).rotate_left(41)
+        ^ window;
+    let bearing_error = unit_noise(seed) * detection.bearing_sigma;
+    let range_error = unit_noise(seed ^ 0xa0761d6478bd642f) * detection.range_sigma;
+    detection.bearing = normalize_angle(detection.bearing + bearing_error);
+    detection.distance = (detection.distance + range_error).max(0.0);
+}
+
+fn unit_noise(seed: u64) -> f64 {
+    let value = mix64(seed) >> 11;
+    (value as f64 / ((1_u64 << 53) as f64)) * 2.0 - 1.0
+}
+
+fn mix64(mut value: u64) -> u64 {
+    value ^= value >> 30;
+    value = value.wrapping_mul(0xbf58476d1ce4e5b9);
+    value ^= value >> 27;
+    value = value.wrapping_mul(0x94d049bb133111eb);
+    value ^ (value >> 31)
+}
+
+fn wavelength_bin(index: usize) -> WavelengthBin {
+    const BINS: [WavelengthBin; SPECTRUM_BINS] = [
+        WavelengthBin::Radio,
+        WavelengthBin::Microwave,
+        WavelengthBin::Infrared,
+        WavelengthBin::Optical,
+        WavelengthBin::Ultraviolet,
+        WavelengthBin::XRay,
+        WavelengthBin::Gamma,
+        WavelengthBin::EngineThermal,
+        WavelengthBin::Radar,
+        WavelengthBin::Lidar,
+    ];
+    BINS[index]
 }
 
 pub fn compute_all_detections(
@@ -166,11 +383,16 @@ fn compute_sensor_detections(
                 if snr >= sensor.min_snr {
                     detections.push(Detection {
                         source_id: source.id,
+                        contact_id: source.id.unwrap_or(0),
                         wavelength_bin: unsafe { std::mem::transmute::<usize, WavelengthBin>(i) },
                         bearing: source.direction,
                         distance: source.distance,
                         strength: power,
                         snr,
+                        bearing_sigma: 0.0,
+                        range_sigma: 0.0,
+                        emission_tick: 0,
+                        market_payload: None,
                     });
                 }
             }
@@ -231,13 +453,23 @@ fn compute_sensor_detections(
             }
             let snr = arc_received[i] / noise;
             if snr >= sensor.min_snr {
+                let market_payload = if i == WavelengthBin::Radio as usize {
+                    arc.market_payload.clone()
+                } else {
+                    None
+                };
                 detections.push(Detection {
                     source_id: arc.source_id,
-                    wavelength_bin: unsafe { std::mem::transmute::<usize, WavelengthBin>(i) },
+                    contact_id: arc.source_id.unwrap_or(0),
+                    wavelength_bin: wavelength_bin(i),
                     bearing,
                     distance,
                     strength: arc_received[i],
                     snr,
+                    bearing_sigma: 0.0,
+                    range_sigma: 0.0,
+                    emission_tick: 0,
+                    market_payload,
                 });
             }
         }
@@ -275,12 +507,39 @@ mod tests {
                 noise_floor: 1.0,
                 integration_time: 1.0,
                 min_snr: 1.0,
+                spectral_response: None,
             }],
             emitters: vec![],
             thermal: ThermalState::new(0.0, 1.0, 1.0),
             collision_response: CollisionResponse::Ghost,
             albedo: Spectrum::zero(),
         }
+    }
+
+    #[test]
+    fn deterministic_noise_varies_by_integration_window() {
+        let base = Detection {
+            source_id: Some(7),
+            contact_id: 1,
+            wavelength_bin: WavelengthBin::Optical,
+            bearing: 1.0,
+            distance: 1.0e9,
+            strength: 1.0,
+            snr: 2.0,
+            bearing_sigma: 0.01,
+            range_sigma: 1.0e6,
+            emission_tick: 0,
+            market_payload: None,
+        };
+        let mut first = base.clone();
+        let mut replay = base.clone();
+        let mut next = base;
+        apply_measurement_noise(&mut first, 5, 10);
+        apply_measurement_noise(&mut replay, 5, 10);
+        apply_measurement_noise(&mut next, 5, 11);
+        assert_eq!(first, replay);
+        assert_ne!(first.bearing, next.bearing);
+        assert_ne!(anonymous_contact_id(1, 7), anonymous_contact_id(2, 7));
     }
 
     #[test]

@@ -1,0 +1,16 @@
+{
+  "profiles": [
+    {"name":"Sun","temperature_k":5778.0,"emissivity":1.0,"albedo":[0,0,0,0,0,0,0,0,0,0],"natural_luminosity":[1e12,1e15,0,0,1e20,1e17,0,0,0,0],"internal_generation_w":3.828e26},
+    {"name":"Mercury","temperature_k":440.0,"emissivity":0.9,"albedo":[0.02,0.02,0.03,0.142,0.08,0,0,0,0.05,0.05],"natural_luminosity":[0,0,0,0,0,0,0,0,0,0],"internal_generation_w":0},
+    {"name":"Venus","temperature_k":737.0,"emissivity":0.9,"albedo":[0.02,0.03,0.05,0.75,0.55,0,0,0,0.1,0.1],"natural_luminosity":[0,0,0,0,1e8,0,0,0,0,0],"internal_generation_w":0},
+    {"name":"Earth","temperature_k":288.0,"emissivity":0.95,"albedo":[0.03,0.04,0.05,0.306,0.2,0,0,0,0.1,0.1],"natural_luminosity":[1e8,0,0,0,1e9,0,0,0,0,0],"internal_generation_w":4.7e13},
+    {"name":"Moon","temperature_k":250.0,"emissivity":0.95,"albedo":[0.02,0.02,0.03,0.12,0.06,0,0,0,0.07,0.07],"natural_luminosity":[0,0,0,0,0,0,0,0,0,0],"internal_generation_w":0},
+    {"name":"Mars","temperature_k":210.0,"emissivity":0.95,"albedo":[0.02,0.03,0.04,0.25,0.12,0,0,0,0.08,0.08],"natural_luminosity":[0,0,0,0,1e7,0,0,0,0,0],"internal_generation_w":0},
+    {"name":"Ceres","temperature_k":167.0,"emissivity":0.9,"albedo":[0.02,0.02,0.03,0.09,0.05,0,0,0,0.05,0.05],"natural_luminosity":[0,0,0,0,0,0,0,0,0,0],"internal_generation_w":0},
+    {"name":"Jupiter","temperature_k":165.0,"emissivity":0.95,"albedo":[0.04,0.05,0.08,0.503,0.3,0,0,0,0.15,0.15],"natural_luminosity":[1e13,1e10,0,0,1e10,1e8,0,0,0,0],"internal_generation_w":3.3e17},
+    {"name":"Saturn","temperature_k":134.0,"emissivity":0.95,"albedo":[0.04,0.05,0.08,0.47,0.28,0,0,0,0.15,0.15],"natural_luminosity":[1e11,1e9,0,0,1e9,0,0,0,0,0],"internal_generation_w":8.6e16},
+    {"name":"Uranus","temperature_k":76.0,"emissivity":0.95,"albedo":[0.03,0.04,0.07,0.51,0.3,0,0,0,0.12,0.12],"natural_luminosity":[1e10,0,0,0,0,0,0,0,0,0],"internal_generation_w":3e14},
+    {"name":"Neptune","temperature_k":72.0,"emissivity":0.95,"albedo":[0.03,0.04,0.07,0.41,0.25,0,0,0,0.12,0.12],"natural_luminosity":[1e10,0,0,0,0,0,0,0,0,0],"internal_generation_w":3e15},
+    {"name":"default","temperature_k":100.0,"emissivity":0.9,"albedo":[0.02,0.02,0.03,0.15,0.08,0,0,0,0.05,0.05],"natural_luminosity":[0,0,0,0,0,0,0,0,0,0],"internal_generation_w":0}
+  ]
+}

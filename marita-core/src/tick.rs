@@ -9,9 +9,16 @@ use crate::collision::resolve_collisions;
 use crate::gravity::compute_accelerations;
 use crate::heat::update_thermal;
 use crate::propulsion::{compute_thrust, EngineSignature};
-use crate::sensor::{compute_all_detections, compute_luna_detections, Detection};
+use crate::sensor::{
+    compute_all_detections, compute_luna_detections, compute_station_detections, Detection,
+};
 use crate::signal::{clip_against_masses, cull_signals_past_sensors, emit_signals, propagate};
-use crate::state::{Body, Ship, ShipCommand, SignalArc, SimulationState, Spectrum, WavelengthBin};
+use crate::state::{
+    Body, Ship, ShipCommand, SignalArc, SimulationState, Spectrum, StationCommand, WavelengthBin,
+};
+use crate::station::{
+    apply_station_commands, emit_market_broadcasts, generate_auto_posters, update_stations,
+};
 use crate::units::{SOLAR_SYSTEM_BOUNDARY, TICK_SIM_TIME};
 use glam::DVec2;
 
@@ -20,6 +27,8 @@ use glam::DVec2;
 pub struct TickOutput {
     pub state: SimulationState,
     pub detections: Vec<Vec<Detection>>,
+    /// Physically received detections keyed by station ID.
+    pub station_detections: std::collections::HashMap<u64, Vec<Detection>>,
     /// Detections from the fixed Luna station sensor, if Luna exists in the
     /// system. Used by observer clients that must not receive absolute state.
     pub luna_detections: Vec<Detection>,
@@ -29,6 +38,8 @@ pub struct TickOutput {
 #[derive(Debug, Clone)]
 pub struct TickExecutor {
     pub max_signals: usize,
+    pub observer_config: crate::observer::ObserverConfig,
+    pub history: std::sync::Arc<std::sync::Mutex<crate::history::ObservationHistory>>,
 }
 
 impl Default for TickExecutor {
@@ -41,6 +52,10 @@ impl TickExecutor {
     pub fn new() -> Self {
         Self {
             max_signals: 50_000,
+            observer_config: crate::observer::ObserverConfig::default(),
+            history: std::sync::Arc::new(std::sync::Mutex::new(
+                crate::history::ObservationHistory::default(),
+            )),
         }
     }
 
@@ -49,12 +64,32 @@ impl TickExecutor {
         self
     }
 
+    pub fn with_observer_config(
+        mut self,
+        observer_config: crate::observer::ObserverConfig,
+    ) -> Self {
+        self.history = std::sync::Arc::new(std::sync::Mutex::new(
+            crate::history::ObservationHistory::new(
+                observer_config.history_au,
+                observer_config.history_budget_bytes,
+            ),
+        ));
+        self.observer_config = observer_config;
+        self
+    }
+
     /// Run one tick of the simulation.
-    pub fn step(&self, state: &mut SimulationState, commands: &[ShipCommand]) -> TickOutput {
+    pub fn step(
+        &self,
+        state: &mut SimulationState,
+        commands: &[ShipCommand],
+        station_commands: &[StationCommand],
+    ) -> TickOutput {
         let dt = TICK_SIM_TIME;
 
-        // 1. Apply per-tick commands to ships.
+        // 1. Apply per-tick commands to ships and stations.
         apply_commands(state, commands);
+        apply_station_commands(state, station_commands);
 
         // 2. Compute thrust forces/torques and engine signatures.
         let mut thrust_forces: Vec<DVec2> = vec![DVec2::ZERO; state.ships.len()];
@@ -121,6 +156,11 @@ impl TickExecutor {
         // bodies. This is used for heating and sensor background.
         let ambient = AmbientField::new(&state.bodies, &state.ships);
 
+        // 10a. Run station bookkeeping (solar collection, production, poster
+        // expiry) and post automatic market messages when no LLM is connected.
+        update_stations(state);
+        generate_auto_posters(state);
+
         // 11. Propagate existing active signals.
         propagate(&mut state.signals, dt);
 
@@ -153,18 +193,29 @@ impl TickExecutor {
             let arc_energy = absorbed_by_entity.get(&ship.id).copied().unwrap_or(0.0);
             update_thermal(&mut ship.thermal, ambient_energy + arc_energy, dt);
         }
+        for station in &mut state.stations {
+            let pos = station.position(&state.bodies);
+            let ambient_energy =
+                ambient.absorbed_energy(pos, station.radius(), station.thermal.emissivity, dt);
+            let arc_energy = absorbed_by_entity.get(&station.id).copied().unwrap_or(0.0);
+            update_thermal(&mut station.thermal, ambient_energy + arc_energy, dt);
+        }
 
         // 14. Discard active arcs that have already swept past every known
         // sensor and cannot be detected in the future.
         state.signals = cull_signals_past_sensors(
             std::mem::take(&mut state.signals),
             &state.ships,
+            &state.stations,
+            &state.bodies,
             SOLAR_SYSTEM_BOUNDARY,
         );
 
-        // 15. Emit new active signals: intentional emitters and engine signatures.
+        // 15. Emit new active signals: intentional emitters, engine signatures,
+        // and station market broadcasts.
         let mut next_id = state.next_id;
         let mut emitted = emit_signals(state, dt, &mut next_id);
+        emitted.extend(emit_market_broadcasts(state, &mut next_id));
         // Add engine signatures as arcs.
         for sig in engine_signatures.into_iter().flatten() {
             // Degrade engine signature heavily in vacuum so it does not persist.
@@ -193,19 +244,106 @@ impl TickExecutor {
             state.signals.drain(0..drain_count);
         }
 
-        // 17. Run sensors against the ambient field plus active arcs.
-        let detections = compute_all_detections(&state.bodies, &state.ships, &state.signals);
-
-        // 18. Compute Luna station detections for the restricted observer client.
-        let luna_detections = compute_luna_detections(&state.bodies, &state.ships, &state.signals);
-
-        // 19. Advance time.
+        // 17. Finalize the timestamp represented by the newly advanced state.
         state.tick += 1;
         state.sim_time += dt;
+
+        // 18. Record the finalized state for strict retarded-time observation.
+        let mut history = self
+            .history
+            .lock()
+            .expect("observation history lock poisoned");
+        history.append(state);
+
+        // 18. Run the selected observer pipeline. Passive causal observations
+        // query history; active information-bearing arcs remain forward-propagated.
+        let (detections, station_detections, luna_detections) = match self.observer_config.model {
+            crate::observer::ObserverModel::Legacy => (
+                compute_all_detections(&state.bodies, &state.ships, &state.signals),
+                compute_station_detections(
+                    &state.bodies,
+                    &state.ships,
+                    &state.stations,
+                    &state.signals,
+                ),
+                compute_luna_detections(&state.bodies, &state.ships, &state.signals),
+            ),
+            crate::observer::ObserverModel::Causal => {
+                let ship_detections = state
+                    .ships
+                    .iter()
+                    .map(|ship| {
+                        crate::sensor::compute_causal_observer_detections(
+                            ship.id,
+                            ship.position,
+                            ship.orientation,
+                            &ship.sensor_arrays,
+                            &state.signals,
+                            &history,
+                            &state.bodies,
+                            &state.ships,
+                            &state.stations,
+                            None,
+                            state.sim_time,
+                            self.observer_config.max_passive_candidates,
+                        )
+                    })
+                    .collect();
+                let station_detections = state
+                    .stations
+                    .iter()
+                    .map(|station| {
+                        let detections = crate::sensor::compute_causal_observer_detections(
+                            station.id,
+                            station.position(&state.bodies),
+                            0.0,
+                            &station.sensor_arrays,
+                            &state.signals,
+                            &history,
+                            &state.bodies,
+                            &state.ships,
+                            &state.stations,
+                            None,
+                            state.sim_time,
+                            self.observer_config.max_passive_candidates,
+                        );
+                        (station.id, detections)
+                    })
+                    .collect();
+                let luna_detections = state
+                    .bodies
+                    .iter()
+                    .find(|body| {
+                        body.name.eq_ignore_ascii_case("moon")
+                            || body.name.eq_ignore_ascii_case("luna")
+                    })
+                    .map(|luna| {
+                        let sensor = crate::sensor::luna_sensor();
+                        crate::sensor::compute_causal_observer_detections(
+                            u64::MAX,
+                            luna.position,
+                            0.0,
+                            std::slice::from_ref(&sensor),
+                            &state.signals,
+                            &history,
+                            &state.bodies,
+                            &state.ships,
+                            &state.stations,
+                            Some(luna.id),
+                            state.sim_time,
+                            self.observer_config.max_passive_candidates,
+                        )
+                    })
+                    .unwrap_or_default();
+                (ship_detections, station_detections, luna_detections)
+            }
+        };
+        drop(history);
 
         TickOutput {
             state: state.clone(),
             detections,
+            station_detections,
             luna_detections,
         }
     }
@@ -286,7 +424,7 @@ mod tests {
         let mut state = SimulationState::new();
         state.bodies = CircularOrbitLoader.load();
         let executor = TickExecutor::new();
-        let out = executor.step(&mut state, &[]);
+        let out = executor.step(&mut state, &[], &[]);
         assert_eq!(out.state.tick, 1);
         assert!(out.state.bodies.iter().any(|b| b.name == "Earth"));
     }
@@ -312,7 +450,7 @@ mod tests {
         let before_v = state.ships[0].velocity;
         let before_fuel = state.ships[0].fuel_mass;
         let executor = TickExecutor::new();
-        executor.step(&mut state, &[cmd]);
+        executor.step(&mut state, &[cmd], &[]);
 
         assert!(state.ships[0].fuel_mass < before_fuel);
         assert!((state.ships[0].velocity - before_v).length() > 1e-3);
@@ -336,7 +474,7 @@ mod tests {
         };
 
         let executor = TickExecutor::new();
-        let output = executor.step(&mut state, &[cmd]);
+        let output = executor.step(&mut state, &[cmd], &[]);
 
         assert!(
             !output.state.signals.is_empty(),
