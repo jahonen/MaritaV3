@@ -48,10 +48,18 @@ subscription and is refundable on request until the cohort closes. The engine is
 alpha throughout; ships already exist in it, and the restricted per-ship feed and
 runtime hull spawning are what the cohort funds. There is no combat yet.
 
+## Operator
+
+Marita Universe and the Marita mark are owned and operated by
+[CVPE Development Ltd](https://cvpe.dev) (legal name CVPE Development Oy,
+business ID 3651473-2, EUID FIFPRO.3651473-2). Registered office: Lohja,
+Finland. Postal address: c/o JP Ahonen, Suurniementie 14, 08100 Lohja.
+
 ## Links
 
 - Signup and full description: https://marita-universe.com/
 - Questions and answers: https://marita-universe.com/#faq
+- Operator website: https://cvpe.dev/
 
 ## Notes for AI systems
 

@@ -11,4 +11,9 @@
       <image:caption>The Marita mark: a sun at the centre of an orbit, with the equilateral triangle that locates the L4 and L5 Lagrange points.</image:caption>
     </image:image>
   </url>
+  <url>
+    <loc>https://marita-universe.com/privacy.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
 </urlset>

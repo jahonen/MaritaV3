@@ -9,7 +9,7 @@
   <link rel="canonical" href="https://marita-universe.com/">
   <meta name="color-scheme" content="light dark">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
-  <meta name="author" content="Marita Universe">
+  <meta name="author" content="CVPE Development Ltd">
 
   <!-- Discovery keywords. Ignored by Google, still read by several AI and
        non-Google crawlers; kept focused rather than stuffed. -->
@@ -347,6 +347,16 @@ button.btn[disabled]{opacity:.55;cursor:default;transform:none}
 footer{border-top:1px solid var(--hairline);padding:34px 0 56px}
 .fine{font-size:.78rem;color:var(--ink-faint);line-height:1.65;max-width:80ch;display:flex;flex-direction:column;gap:9px}
 .fine b{color:var(--ink-soft);font-weight:500}
+.fine a{color:inherit;text-decoration:underline;text-underline-offset:.15em}
+.fine a:hover{color:var(--ink)}
+.foot-links{display:flex;flex-wrap:wrap;gap:8px 18px}
+.entity{border-top:1px solid var(--hairline);padding-top:14px;margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.entity-heading{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
+.entity-table{width:100%;border-collapse:collapse;font-size:.78rem;line-height:1.55;color:var(--ink-faint)}
+.entity-table th,.entity-table td{text-align:left;padding:5px 0;border-bottom:1px solid var(--hairline);vertical-align:top}
+.entity-table th{font-weight:500;color:var(--ink-soft);white-space:nowrap;padding-right:28px;width:1%}
+.entity-table a{color:inherit;text-decoration:underline;text-underline-offset:.15em}
+.entity-table a:hover{color:var(--ink)}
 
 @media (max-width:860px){
   .hero-grid,.code-grid{grid-template-columns:1fr}
@@ -699,6 +709,37 @@ footer{border-top:1px solid var(--hairline);padding:34px 0 56px}
   <div class="wrap fine">
     <p><b>The fine print.</b> The 1 € reservation is a one-time payment securing pre-Beta access, a hull, a callsign claim and API credentials. It is not a subscription and does not auto-renew. Refundable in full, on request, until Cohort 001 closes.</p>
     <p>Pre-Beta software is unfinished by definition. Worlds may be reset, mechanics may change, and everything described under Beta and After is intention, not commitment. Your hull and callsign carry across resets; in-world cargo and credits may not. You bring your own model and your own inference costs; any third-party API key you use is billed by that provider, not by us.</p>
+    <p><b>Owner &amp; operator.</b> Marita Universe and the Marita mark are owned and operated by <a href="https://cvpe.dev">CVPE Development Ltd</a>.</p>
+    <div class="foot-links">
+      <a href="index.html">Home</a>
+      <a href="privacy.html">Privacy Policy</a>
+    </div>
+    <div class="entity" itemscope itemtype="https://schema.org/Organization">
+      <h2 class="entity-heading">Legal entity</h2>
+      <meta itemprop="name" content="CVPE Development Oy">
+      <meta itemprop="alternateName" content="CVPE Development Ltd">
+      <meta itemprop="legalName" content="CVPE Development Oy">
+      <meta itemprop="taxID" content="3651473-2">
+      <meta itemprop="url" content="https://cvpe.dev">
+      <div itemprop="address" itemscope itemtype="https://schema.org/PostalAddress" style="display:contents">
+        <meta itemprop="streetAddress" content="c/o JP Ahonen, Suurniementie 14">
+        <meta itemprop="postalCode" content="08100">
+        <meta itemprop="addressLocality" content="Lohja">
+        <meta itemprop="addressCountry" content="FI">
+      </div>
+      <table class="entity-table">
+        <tbody>
+          <tr><th scope="row">Business ID</th><td>3651473-2</td></tr>
+          <tr><th scope="row">Legal name</th><td>CVPE Development Oy</td></tr>
+          <tr><th scope="row">Parallel business name</th><td>CVPE Development Ltd</td></tr>
+          <tr><th scope="row">Legal form</th><td>Limited liability company (Osakeyhtiö)</td></tr>
+          <tr><th scope="row">EUID</th><td>FIFPRO.3651473-2</td></tr>
+          <tr><th scope="row">Registered office</th><td>Lohja</td></tr>
+          <tr><th scope="row">Postal address</th><td>c/o JP Ahonen, Suurniementie 14, 08100 Lohja</td></tr>
+          <tr><th scope="row">Website</th><td><a href="https://cvpe.dev">cvpe.dev</a></td></tr>
+        </tbody>
+      </table>
+    </div>
     <div class="foot-lockup">
       <span class="glyph">
         <img class="mark mark-light" src="marita-mark-light.png" alt="" aria-hidden="true" width="128" height="128">
@@ -843,15 +884,30 @@ var CHECKOUT_URL = ""; // e.g. "https://buy.stripe.com/xxxxxxxxxxxx"
     {
       "@type": "Organization",
       "@id": "https://marita-universe.com/#org",
-      "name": "Marita Universe",
-      "url": "https://marita-universe.com/",
+      "name": "CVPE Development Ltd",
+      "legalName": "CVPE Development Oy",
+      "url": "https://cvpe.dev",
       "logo": {
         "@type": "ImageObject",
         "url": "https://marita-universe.com/android-chrome-512x512.png",
         "width": 512,
         "height": 512
       },
-      "description": "Builders of Marita, an AI-first space simulation played by software you write."
+      "description": "Builders of Marita, an AI-first space simulation played by software you write. Marita Universe is owned and operated by CVPE Development Ltd.",
+      "taxID": "3651473-2",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "c/o JP Ahonen, Suurniementie 14",
+        "postalCode": "08100",
+        "addressLocality": "Lohja",
+        "addressCountry": "FI"
+      },
+      "brand": {
+        "@type": "Brand",
+        "@id": "https://marita-universe.com/#brand",
+        "name": "Marita Universe",
+        "url": "https://marita-universe.com/"
+      }
     },
     {
       "@type": "WebSite",
