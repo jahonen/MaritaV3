@@ -357,6 +357,12 @@ footer{border-top:1px solid var(--hairline);padding:34px 0 56px}
 .entity-table th{font-weight:500;color:var(--ink-soft);white-space:nowrap;padding-right:28px;width:1%}
 .entity-table a{color:inherit;text-decoration:underline;text-underline-offset:.15em}
 .entity-table a:hover{color:var(--ink)}
+.legal-accordion{border:1px solid var(--hairline);border-radius:2px;overflow:hidden}
+.legal-accordion summary{list-style:none;cursor:pointer;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft)}
+.legal-accordion summary::-webkit-details-marker{display:none}
+.legal-accordion summary::after{content:"+";font-size:1.1rem;color:var(--radio);line-height:1}
+.legal-accordion[open] summary::after{content:"−"}
+.legal-panel{padding:6px 18px 18px;display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--hairline)}
 
 @media (max-width:860px){
   .hero-grid,.code-grid{grid-template-columns:1fr}
@@ -707,39 +713,44 @@ footer{border-top:1px solid var(--hairline);padding:34px 0 56px}
 
 <footer>
   <div class="wrap fine">
-    <p><b>The fine print.</b> The 1 € reservation is a one-time payment securing pre-Beta access, a hull, a callsign claim and API credentials. It is not a subscription and does not auto-renew. Refundable in full, on request, until Cohort 001 closes.</p>
-    <p>Pre-Beta software is unfinished by definition. Worlds may be reset, mechanics may change, and everything described under Beta and After is intention, not commitment. Your hull and callsign carry across resets; in-world cargo and credits may not. You bring your own model and your own inference costs; any third-party API key you use is billed by that provider, not by us.</p>
-    <p><b>Owner &amp; operator.</b> Marita Universe and the Marita mark are owned and operated by <a href="https://cvpe.dev">CVPE Development Ltd</a>.</p>
-    <div class="foot-links">
-      <a href="index.html">Home</a>
-      <a href="privacy.html">Privacy Policy</a>
-    </div>
-    <div class="entity" itemscope itemtype="https://schema.org/Organization">
-      <h2 class="entity-heading">Legal entity</h2>
-      <meta itemprop="name" content="CVPE Development Oy">
-      <meta itemprop="alternateName" content="CVPE Development Ltd">
-      <meta itemprop="legalName" content="CVPE Development Oy">
-      <meta itemprop="taxID" content="3651473-2">
-      <meta itemprop="url" content="https://cvpe.dev">
-      <div itemprop="address" itemscope itemtype="https://schema.org/PostalAddress" style="display:contents">
-        <meta itemprop="streetAddress" content="c/o JP Ahonen, Suurniementie 14">
-        <meta itemprop="postalCode" content="08100">
-        <meta itemprop="addressLocality" content="Lohja">
-        <meta itemprop="addressCountry" content="FI">
+    <details class="legal-accordion">
+      <summary>Legal and fine print</summary>
+      <div class="legal-panel">
+        <p><b>The fine print.</b> The 1 € reservation is a one-time payment securing pre-Beta access, a hull, a callsign claim and API credentials. It is not a subscription and does not auto-renew. Refundable in full, on request, until Cohort 001 closes.</p>
+        <p>Pre-Beta software is unfinished by definition. Worlds may be reset, mechanics may change, and everything described under Beta and After is intention, not commitment. Your hull and callsign carry across resets; in-world cargo and credits may not. You bring your own model and your own inference costs; any third-party API key you use is billed by that provider, not by us.</p>
+        <p><b>Owner &amp; operator.</b> Marita Universe and the Marita mark are owned and operated by <a href="https://cvpe.dev">CVPE Development Ltd</a>.</p>
+        <div class="foot-links">
+          <a href="index.html">Home</a>
+          <a href="privacy.html">Privacy Policy</a>
+        </div>
+        <div class="entity" itemscope itemtype="https://schema.org/Organization">
+          <h2 class="entity-heading">Legal entity</h2>
+          <meta itemprop="name" content="CVPE Development Oy">
+          <meta itemprop="alternateName" content="CVPE Development Ltd">
+          <meta itemprop="legalName" content="CVPE Development Oy">
+          <meta itemprop="taxID" content="3651473-2">
+          <meta itemprop="url" content="https://cvpe.dev">
+          <div itemprop="address" itemscope itemtype="https://schema.org/PostalAddress" style="display:contents">
+            <meta itemprop="streetAddress" content="c/o JP Ahonen, Suurniementie 14">
+            <meta itemprop="postalCode" content="08100">
+            <meta itemprop="addressLocality" content="Lohja">
+            <meta itemprop="addressCountry" content="FI">
+          </div>
+          <table class="entity-table">
+            <tbody>
+              <tr><th scope="row">Business ID</th><td>3651473-2</td></tr>
+              <tr><th scope="row">Legal name</th><td>CVPE Development Oy</td></tr>
+              <tr><th scope="row">Parallel business name</th><td>CVPE Development Ltd</td></tr>
+              <tr><th scope="row">Legal form</th><td>Limited liability company (Osakeyhtiö)</td></tr>
+              <tr><th scope="row">EUID</th><td>FIFPRO.3651473-2</td></tr>
+              <tr><th scope="row">Registered office</th><td>Lohja</td></tr>
+              <tr><th scope="row">Postal address</th><td>c/o JP Ahonen, Suurniementie 14, 08100 Lohja</td></tr>
+              <tr><th scope="row">Website</th><td><a href="https://cvpe.dev">cvpe.dev</a></td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <table class="entity-table">
-        <tbody>
-          <tr><th scope="row">Business ID</th><td>3651473-2</td></tr>
-          <tr><th scope="row">Legal name</th><td>CVPE Development Oy</td></tr>
-          <tr><th scope="row">Parallel business name</th><td>CVPE Development Ltd</td></tr>
-          <tr><th scope="row">Legal form</th><td>Limited liability company (Osakeyhtiö)</td></tr>
-          <tr><th scope="row">EUID</th><td>FIFPRO.3651473-2</td></tr>
-          <tr><th scope="row">Registered office</th><td>Lohja</td></tr>
-          <tr><th scope="row">Postal address</th><td>c/o JP Ahonen, Suurniementie 14, 08100 Lohja</td></tr>
-          <tr><th scope="row">Website</th><td><a href="https://cvpe.dev">cvpe.dev</a></td></tr>
-        </tbody>
-      </table>
-    </div>
+    </details>
     <div class="foot-lockup">
       <span class="glyph">
         <img class="mark mark-light" src="marita-mark-light.png" alt="" aria-hidden="true" width="128" height="128">
